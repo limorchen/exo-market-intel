@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS state_registry (
 
 CREATE TABLE IF NOT EXISTS entity_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     entity_type TEXT NOT NULL,
     states TEXT,
     country TEXT DEFAULT 'US',
@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS entity_registry (
     linkedin_url TEXT,
     priority_score REAL,
     manual_override_score REAL,
+    products TEXT,
+    recent_deal TEXT,
     notes TEXT,
     source TEXT,
     last_updated TEXT,

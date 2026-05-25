@@ -40,8 +40,9 @@ def seed_entities():
                 """INSERT OR REPLACE INTO entity_registry
                    (name, entity_type, states, country, us_reach, specialty,
                     current_exosome_use, ind_seeking, website, contact_info,
-                    linkedin_url, priority_score, notes, source, last_updated, active)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    linkedin_url, priority_score, products, recent_deal,
+                    notes, source, last_updated, active)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     ent["name"], ent["entity_type"],
                     ent.get("states", ""), ent.get("country", "US"),
@@ -53,6 +54,8 @@ def seed_entities():
                     ent.get("contact_info", ""),
                     ent.get("linkedin_url", ""),
                     score,
+                    ent.get("products", ""),
+                    ent.get("recent_deal", ""),
                     ent.get("notes", ""),
                     ent.get("source", "seed"),
                     today, active,

@@ -17,3 +17,14 @@ def init_db() -> None:
     schema = SCHEMA_PATH.read_text()
     with get_conn() as conn:
         conn.executescript(schema)
+    _migrate_db()
+
+
+def _migrate_db() -> None:
+    new_cols = [("products", "TEXT"), ("recent_deal", "TEXT")]
+    with get_conn() as conn:
+        for col, col_type in new_cols:
+            try:
+                conn.execute(f"ALTER TABLE entity_registry ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass

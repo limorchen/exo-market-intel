@@ -193,22 +193,36 @@ def render_entities(entities_df: pd.DataFrame):
 
     st.caption(f"Showing {len(df)} entities (of {len(entities_df)} total)")
 
-    display_cols = ["id", "name", "entity_type", "states", "specialty", "current_exosome_use",
-                    "priority_score", "website", "last_updated"]
+    display_cols = ["id", "name", "entity_type", "states", "specialty", "products",
+                    "current_exosome_use", "priority_score", "recent_deal", "website", "last_updated"]
     rename_map = {
         "id": "ID", "name": "Name", "entity_type": "Type", "states": "States",
-        "specialty": "Specialty", "current_exosome_use": "Engagement",
-        "priority_score": "Score", "website": "Website", "last_updated": "Updated",
+        "specialty": "Specialty", "products": "Products",
+        "current_exosome_use": "Engagement",
+        "priority_score": "Score", "recent_deal": "Recent Deal",
+        "website": "Website", "last_updated": "Updated",
     }
     show_df = df[display_cols].rename(columns=rename_map).reset_index(drop=True)
 
+    # Add deal indicator column
+    show_df.insert(1, "🔥", show_df["Recent Deal"].apply(lambda x: "🔥" if x else ""))
+
+    def _highlight_deals(row):
+        color = "background-color: #fff8e1; font-weight: 500;" if row.get("Recent Deal") else ""
+        return [color] * len(row)
+
+    styled = show_df.style.apply(_highlight_deals, axis=1)
+
     st.dataframe(
-        show_df,
+        styled,
         use_container_width=True,
         hide_index=True,
         column_config={
             "Website": st.column_config.LinkColumn("Website"),
             "Score": st.column_config.NumberColumn("Score", format="%.1f"),
+            "🔥": st.column_config.TextColumn("🔥", width="small"),
+            "Products": st.column_config.TextColumn("Products", width="medium"),
+            "Recent Deal": st.column_config.TextColumn("Recent Deal", width="medium"),
         },
     )
 
@@ -218,6 +232,8 @@ def render_entities(entities_df: pd.DataFrame):
         sel_name = st.selectbox("Select entity to expand", ["—"] + df["name"].tolist())
         if sel_name != "—":
             row = df[df["name"] == sel_name].iloc[0]
+            if row.get("recent_deal"):
+                st.success(f"🔥 **Recent Deal:** {row['recent_deal']}")
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown(f"**Name:** {row['name']}")
@@ -235,6 +251,7 @@ def render_entities(entities_df: pd.DataFrame):
                 st.markdown(f"**Source:** {row.get('source', '—')}")
                 st.markdown(f"**Active:** {'Yes' if row.get('active') else 'No (archived)'}")
                 st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
+            st.markdown(f"**Products:** {row.get('products', '—')}")
             st.markdown(f"**Notes:** {row.get('notes', '—')}")
 
     # Export
@@ -286,6 +303,8 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
             website = st.text_input("Website")
             contact_info = st.text_input("Contact Info")
             linkedin_url = st.text_input("LinkedIn URL")
+            products = st.text_input("Products (comma-separated key products/brands)")
+            recent_deal = st.text_input("Recent Deal (acquisition, partnership, or supply deal since 2024)")
             notes = st.text_area("Notes")
             source = st.text_input("Source / How Discovered")
             submitted = st.form_submit_button("Add Entity")
@@ -300,11 +319,13 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
                         """INSERT INTO entity_registry
                            (name, entity_type, states, country, us_reach, specialty,
                             current_exosome_use, ind_seeking, website, contact_info,
-                            linkedin_url, priority_score, notes, source, last_updated, active)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            linkedin_url, priority_score, products, recent_deal,
+                            notes, source, last_updated, active)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (name, entity_type, states, country, int(us_reach), specialty,
                          engagement, int(ind_seeking), website, contact_info, linkedin_url,
-                         score, notes, source, datetime.now(timezone.utc).isoformat(),
+                         score, products, recent_deal,
+                         notes, source, datetime.now(timezone.utc).isoformat(),
                          0 if ind_seeking else 1),
                     )
                     entity_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -349,9 +370,66 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def render_instructions():
+    with st.expander("📖 How to use this dashboard — click to collapse", expanded=True):
+        st.markdown("""
+**Purpose**
+This dashboard maps the commercial (non-IND) US exosome market for NurExone — tracking
+state legislation risk, potential distribution and partnership entities, and deal activity.
+
+---
+
+**Section A — US State Legislation Map**
+Choropleth of all 50 states colour-coded by regulatory risk for non-IND exosome/cell therapy:
+- 🟢 **Low** — physician exemption active (FL, UT, NH); priority states for entry
+- 🟡 **Medium** — Right-to-Try or advancing legislation; secondary targets
+- 🔴 **High** — No exemption or active FDA-aligned enforcement; avoid initial entry
+- ⚫ **Unknown** — Insufficient data
+
+Hover over a state for key provisions. Expand the detail table for full legislation data.
+
+---
+
+**Section B — Entity Registry**
+Filterable table of commercial partners across four categories:
+| Type | Who they are |
+|---|---|
+| **Distributor** | B2B suppliers, GPOs, and logistics handlers for biologics |
+| **CME** | Physician education providers — key recruitment channel for product adoption |
+| **KOL** | Key Opinion Leaders who influence clinical adoption through speaking and case studies |
+| **MSO** | Management Service Organizations and clinic networks — gate-keepers for standardised procurement |
+
+**Priority Score (1–10)** is auto-calculated from: legislation risk (35%) · geographic reach (25%) ·
+exosome engagement (25%) · contact completeness (15%).
+
+**🔥 Recent Deal** marks entities with a confirmed acquisition, partnership, or distribution deal in the past 2 years.
+These are the highest-priority outreach targets — they are actively expanding and looking for vendors.
+
+Use the **sidebar filters** to narrow by Type, State, Specialty, Score, and Engagement level.
+Click **Export Filtered Table (Excel)** in the sidebar to download your selection.
+
+---
+
+**Adding a New Entity**
+Use the **Add Entity** form in the sidebar:
+1. **Name** and **Type** are required.
+2. **States** — enter comma-separated 2-letter codes (e.g. `FL,TX`) or `INTL` for international.
+3. **Exosome Engagement** — set honestly:
+   - *active* = currently buying/using exosome products
+   - *interested* = expressed intent or adjacent positioning
+   - *adjacent* = in the regenerative space but no confirmed exosome activity
+   - *unknown* = unverified
+4. Tick **IND Seeking** if the entity has active ClinicalTrials.gov registrations — this sets their score to 0 and hides them from the active registry (commercial pathway only).
+5. The **Priority Score** is calculated automatically on save.
+6. All additions are logged to the **Update Log** (Section C) for audit purposes.
+""")
+
+
 def main():
     st.title("🔬 NurExone — Naive Exosome US Market Intelligence")
     st.caption("Commercial (non-IND) pathway only. All entities reflect physician-administered or wellness/aesthetics use.")
+
+    render_instructions()
 
     states_df = load_states()
     entities_df = load_entities()
