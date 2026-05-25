@@ -1,0 +1,369 @@
+"""NurExone Exosome Market Intelligence Dashboard."""
+from __future__ import annotations
+
+import io
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.db import get_conn, init_db
+from utils.scoring import calculate_score
+
+st.set_page_config(
+    page_title="NurExone — Exosome Market Intelligence",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+init_db()
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=60)
+def load_states() -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql_query("SELECT * FROM state_registry ORDER BY state_name", conn)
+
+
+@st.cache_data(ttl=60)
+def load_entities() -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql_query("SELECT * FROM entity_registry ORDER BY priority_score DESC NULLS LAST", conn)
+
+
+@st.cache_data(ttl=60)
+def load_update_log() -> pd.DataFrame:
+    with get_conn() as conn:
+        return pd.read_sql_query(
+            """
+            SELECT ul.id, ul.log_date, er.name AS entity_name, ul.change_type,
+                   ul.description, ul.source_url, ul.logged_by
+            FROM update_log ul
+            LEFT JOIN entity_registry er ON ul.entity_id = er.id
+            ORDER BY ul.log_date DESC
+            LIMIT 30
+            """,
+            conn,
+        )
+
+
+def invalidate_cache():
+    load_states.clear()
+    load_entities.clear()
+    load_update_log.clear()
+
+
+_RISK_COLORS = {"low": "#2ecc71", "medium": "#f39c12", "high": "#e74c3c", "unknown": "#95a5a6", "unclear": "#95a5a6"}
+_RISK_LABELS = {"low": "Low — Permissive", "medium": "Medium — Ambiguous", "high": "High — Restrictive", "unknown": "Unknown"}
+
+# ── SECTION A — Legislation map ───────────────────────────────────────────────
+
+def render_map(states_df: pd.DataFrame):
+    st.subheader("Section A — US State Legislation Map")
+
+    if states_df.empty:
+        st.info("No state data loaded yet. Run `pipeline/seed_states.py` first.")
+        return
+
+    df = states_df.copy()
+    df["risk_display"] = df["risk_level"].fillna("unknown").str.lower()
+    df["color_order"] = df["risk_display"].map({"low": 0, "medium": 1, "high": 2, "unknown": 3, "unclear": 3}).fillna(3)
+    df["provisions_short"] = df["key_provisions"].fillna("").str[:120]
+    df["tooltip"] = (
+        "<b>" + df["state_name"] + "</b><br>"
+        + "Type: " + df["legislation_type"].fillna("unknown") + "<br>"
+        + "Risk: " + df["risk_display"] + "<br>"
+        + df["provisions_short"]
+    )
+
+    color_discrete_map = {
+        "low": _RISK_COLORS["low"],
+        "medium": _RISK_COLORS["medium"],
+        "high": _RISK_COLORS["high"],
+        "unknown": _RISK_COLORS["unknown"],
+        "unclear": _RISK_COLORS["unclear"],
+    }
+
+    fig = px.choropleth(
+        df,
+        locations="state_code",
+        locationmode="USA-states",
+        color="risk_display",
+        color_discrete_map=color_discrete_map,
+        scope="usa",
+        hover_name="state_name",
+        hover_data={"state_code": False, "risk_display": True, "legislation_type": True, "provisions_short": True},
+        labels={
+            "risk_display": "Risk Level",
+            "legislation_type": "Legislation Type",
+            "provisions_short": "Key Provisions",
+        },
+        category_orders={"risk_display": ["low", "medium", "high", "unknown", "unclear"]},
+    )
+    fig.update_layout(
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        legend_title_text="Risk Level",
+        height=420,
+        geo=dict(bgcolor="rgba(0,0,0,0)"),
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    counts = df["risk_display"].value_counts()
+    cols = st.columns(5)
+    for i, (level, label) in enumerate(_RISK_LABELS.items()):
+        cols[i].metric(label, counts.get(level, 0))
+
+    with st.expander("State legislation detail table"):
+        display_cols = ["state_code", "state_name", "legislation_type", "risk_level",
+                        "physician_admin_allowed", "wellness_allowed", "aesthetics_allowed",
+                        "key_provisions", "effective_date", "last_updated"]
+        st.dataframe(
+            df[display_cols].rename(columns={
+                "state_code": "Code", "state_name": "State",
+                "legislation_type": "Type", "risk_level": "Risk",
+                "physician_admin_allowed": "Physician OK",
+                "wellness_allowed": "Wellness OK",
+                "aesthetics_allowed": "Aesthetics OK",
+                "key_provisions": "Key Provisions",
+                "effective_date": "Effective",
+                "last_updated": "Updated",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+# ── SECTION B — Entity table ──────────────────────────────────────────────────
+
+def render_entities(entities_df: pd.DataFrame):
+    st.subheader("Section B — Entity Registry")
+
+    if entities_df.empty:
+        st.info("No entities loaded yet. Run `pipeline/seed_entities.py` first.")
+        return
+
+    # Sidebar filters
+    with st.sidebar:
+        st.header("Filters")
+
+        all_types = sorted(entities_df["entity_type"].dropna().unique().tolist())
+        sel_types = st.multiselect("Entity Type", all_types, default=all_types)
+
+        all_states_raw = set()
+        for s in entities_df["states"].dropna():
+            for code in s.split(","):
+                all_states_raw.add(code.strip())
+        all_states = sorted(all_states_raw)
+        sel_states = st.multiselect("State (any)", all_states)
+
+        all_specs = sorted(entities_df["specialty"].dropna().unique().tolist())
+        sel_specs = st.multiselect("Specialty", all_specs, default=all_specs)
+
+        min_score = st.slider("Min Priority Score", 1.0, 10.0, 1.0, 0.5)
+
+        engagement_opts = ["active", "interested", "adjacent", "unknown"]
+        sel_engagement = st.multiselect("Exosome Engagement", engagement_opts, default=engagement_opts)
+
+        show_archived = st.toggle("Show Archived", value=False)
+
+    df = entities_df.copy()
+    if not show_archived:
+        df = df[df["active"] == 1]
+
+    if sel_types:
+        df = df[df["entity_type"].isin(sel_types)]
+    if sel_states:
+        df = df[df["states"].apply(
+            lambda s: any(code.strip() in sel_states for code in (s or "").split(","))
+        )]
+    if sel_specs:
+        df = df[df["specialty"].isin(sel_specs)]
+    df = df[df["priority_score"].fillna(0) >= min_score]
+    if sel_engagement:
+        df = df[df["current_exosome_use"].isin(sel_engagement)]
+
+    st.caption(f"Showing {len(df)} entities (of {len(entities_df)} total)")
+
+    display_cols = ["id", "name", "entity_type", "states", "specialty", "current_exosome_use",
+                    "priority_score", "website", "last_updated"]
+    rename_map = {
+        "id": "ID", "name": "Name", "entity_type": "Type", "states": "States",
+        "specialty": "Specialty", "current_exosome_use": "Engagement",
+        "priority_score": "Score", "website": "Website", "last_updated": "Updated",
+    }
+    show_df = df[display_cols].rename(columns=rename_map).reset_index(drop=True)
+
+    st.dataframe(
+        show_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Website": st.column_config.LinkColumn("Website"),
+            "Score": st.column_config.NumberColumn("Score", format="%.1f"),
+        },
+    )
+
+    # Click-to-expand entity profile
+    st.markdown("#### Entity Detail View")
+    if len(df) > 0:
+        sel_name = st.selectbox("Select entity to expand", ["—"] + df["name"].tolist())
+        if sel_name != "—":
+            row = df[df["name"] == sel_name].iloc[0]
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(f"**Name:** {row['name']}")
+                st.markdown(f"**Type:** {row['entity_type']}")
+                st.markdown(f"**States:** {row['states']}")
+                st.markdown(f"**Specialty:** {row.get('specialty', '—')}")
+                st.markdown(f"**Engagement:** {row.get('current_exosome_use', '—')}")
+                st.markdown(f"**Priority Score:** {row.get('priority_score', '—')}")
+                if row.get("manual_override_score"):
+                    st.markdown(f"**Manual Override Score:** {row['manual_override_score']}")
+            with c2:
+                st.markdown(f"**Website:** {row.get('website', '—')}")
+                st.markdown(f"**Contact:** {row.get('contact_info', '—')}")
+                st.markdown(f"**LinkedIn:** {row.get('linkedin_url', '—')}")
+                st.markdown(f"**Source:** {row.get('source', '—')}")
+                st.markdown(f"**Active:** {'Yes' if row.get('active') else 'No (archived)'}")
+                st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
+            st.markdown(f"**Notes:** {row.get('notes', '—')}")
+
+    # Export
+    buf = io.BytesIO()
+    df[display_cols].rename(columns=rename_map).to_excel(buf, index=False, engine="openpyxl")
+    buf.seek(0)
+    st.sidebar.download_button(
+        "Export Filtered Table (Excel)",
+        data=buf,
+        file_name=f"exo_market_entities_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ── SECTION C — Update log ────────────────────────────────────────────────────
+
+def render_update_log(log_df: pd.DataFrame):
+    with st.expander("Section C — Update Log (last 30 entries)", expanded=False):
+        if log_df.empty:
+            st.info("No log entries yet.")
+            return
+        st.dataframe(
+            log_df.rename(columns={
+                "log_date": "Date", "entity_name": "Entity", "change_type": "Change",
+                "description": "Description", "source_url": "Source URL", "logged_by": "Logged By",
+            }),
+            use_container_width=True,
+            hide_index=True,
+            column_config={"Source URL": st.column_config.LinkColumn("Source URL")},
+        )
+
+
+# ── SECTION D — Sidebar controls ─────────────────────────────────────────────
+
+def render_sidebar_controls(entities_df: pd.DataFrame):
+    with st.sidebar:
+        st.divider()
+        st.header("Add Entity")
+
+        with st.form("add_entity_form", clear_on_submit=True):
+            name = st.text_input("Name *")
+            entity_type = st.selectbox("Type *", ["distributor", "CME", "KOL", "MSO"])
+            states = st.text_input("States (comma-separated, e.g. FL,TX or INTL)")
+            country = st.text_input("Country", "US")
+            us_reach = st.checkbox("US Reach", value=True)
+            specialty = st.text_input("Specialty")
+            engagement = st.selectbox("Exosome Engagement", ["unknown", "active", "interested", "adjacent"])
+            ind_seeking = st.checkbox("IND Seeking (EXCLUDES from dashboard)", value=False)
+            website = st.text_input("Website")
+            contact_info = st.text_input("Contact Info")
+            linkedin_url = st.text_input("LinkedIn URL")
+            notes = st.text_area("Notes")
+            source = st.text_input("Source / How Discovered")
+            submitted = st.form_submit_button("Add Entity")
+
+        if submitted:
+            if not name:
+                st.sidebar.error("Name is required.")
+            else:
+                with get_conn() as conn:
+                    score = calculate_score(states, engagement, website, contact_info, int(ind_seeking), conn)
+                    conn.execute(
+                        """INSERT INTO entity_registry
+                           (name, entity_type, states, country, us_reach, specialty,
+                            current_exosome_use, ind_seeking, website, contact_info,
+                            linkedin_url, priority_score, notes, source, last_updated, active)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (name, entity_type, states, country, int(us_reach), specialty,
+                         engagement, int(ind_seeking), website, contact_info, linkedin_url,
+                         score, notes, source, datetime.now(timezone.utc).isoformat(),
+                         0 if ind_seeking else 1),
+                    )
+                    entity_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    conn.execute(
+                        "INSERT INTO update_log (entity_id, log_date, change_type, description, logged_by) VALUES (?,?,?,?,?)",
+                        (entity_id, datetime.now(timezone.utc).isoformat(), "new",
+                         f"Added {name} via dashboard form", "user"),
+                    )
+                invalidate_cache()
+                st.sidebar.success(f"Added {name} (score: {score})")
+                st.rerun()
+
+        st.divider()
+        st.header("Pipeline")
+        if st.button("Run Refresh Pipeline"):
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).parent / "pipeline" / "refresh.py")],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode == 0:
+                st.sidebar.success("Refresh complete.")
+            else:
+                st.sidebar.error(f"Refresh failed: {result.stderr[:200]}")
+            invalidate_cache()
+
+        st.divider()
+        st.header("Dashboard Stats")
+        with get_conn() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM entity_registry WHERE active=1").fetchone()[0]
+            excluded = conn.execute("SELECT COUNT(*) FROM entity_registry WHERE ind_seeking=1").fetchone()[0]
+            by_type = conn.execute(
+                "SELECT entity_type, COUNT(*) as n FROM entity_registry WHERE active=1 GROUP BY entity_type"
+            ).fetchall()
+            last_log = conn.execute("SELECT MAX(log_date) FROM update_log").fetchone()[0]
+
+        st.metric("Active Entities", total)
+        st.metric("Excluded (IND Seeking)", excluded)
+        for row in by_type:
+            st.write(f"- **{row['entity_type']}**: {row['n']}")
+        st.caption(f"Last update: {last_log or 'never'}")
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main():
+    st.title("🔬 NurExone — Naive Exosome US Market Intelligence")
+    st.caption("Commercial (non-IND) pathway only. All entities reflect physician-administered or wellness/aesthetics use.")
+
+    states_df = load_states()
+    entities_df = load_entities()
+    log_df = load_update_log()
+
+    render_sidebar_controls(entities_df)
+    render_map(states_df)
+    st.divider()
+    render_entities(entities_df)
+    st.divider()
+    render_update_log(log_df)
+
+
+if __name__ == "__main__":
+    main()
