@@ -1124,6 +1124,43 @@ entities = [
         "source": "web_research_2026",
     },
 
+    # ─── MSO — LONGEVITY CLINIC NETWORKS ──────────────────────────────────────
+
+    {
+        "name": "Fountain Life",
+        "entity_type": "MSO",
+        "states": "FL,TX,NY,CA",
+        "country": "US",
+        "us_reach": 1,
+        "specialty": "longevity, precision diagnostics, exosome, stem cell, AI-powered preventive health",
+        "current_exosome_use": "active",
+        "ind_seeking": 0,
+        "website": "https://www.fountainlife.com/",
+        "contact_info": "",
+        "linkedin_url": "https://www.linkedin.com/company/fountain-life",
+        "products": "stem cell & exosome therapies, AI diagnostics, full-body MRI, whole-genome sequencing, biomarkers, concierge longevity membership (APEX + CORE tiers)",
+        "recent_deal": "Celularity partnership to supply placental stem cell products under FL Statute §458.3245 (July 2025); $18M Series B (August 2025, $108M total)",
+        "notes": "Premium longevity clinic network co-founded by Peter Diamandis and Tony Robbins. Active locations: Naples FL, Lake Nona/Orlando FL, Dallas TX, Westchester NY. Opening: Houston TX (Dec 2025), Miami FL + Los Angeles CA (2026). Explicitly offers 'Stem Cell & Exosome Therapies' as named service. Celularity supply partnership is structured as non-IND under FL Statute §458.3245 — physician-directed use, no FDA IND required. Membership $19,500-21,500/yr. HIGH VALUE — single relationship reaches expanding multi-state premium membership network.",
+        "source": "web_research_2026",
+    },
+    {
+        "name": "Next Health",
+        "entity_type": "MSO",
+        "states": "CA,NY,HI",
+        "country": "US",
+        "us_reach": 1,
+        "specialty": "health optimization, longevity, exosome, NAD+, IV therapy, cryotherapy, hyperbaric oxygen",
+        "current_exosome_use": "active",
+        "ind_seeking": 0,
+        "website": "https://www.next-health.com/",
+        "contact_info": "",
+        "linkedin_url": "",
+        "products": "exosome therapy, stem cell treatments, NAD+ IV, hormone optimization, cryotherapy, hyperbaric oxygen, infrared sauna, plasma exchange",
+        "recent_deal": "",
+        "notes": "Founded by Dr. Darshan Shah and Kevin Peake. Billed as 'world's first health optimization and longevity center.' Confirmed locations: West Hollywood CA, New York City NY (Madison Ave; The Parlor Flatiron), Four Seasons Maui HI. Featured on Bravo's Real Housewives of Beverly Hills. Explicitly lists 'Exosome Therapy' and 'Stem Cells & Exosomes' as named services. Full location list: next-health.com/inside/locations. TODO: confirm full state footprint and additional locations.",
+        "source": "web_research_2026",
+    },
+
     # ─── MSO — FLORIDA ────────────────────────────────────────────────────────
 
     {
