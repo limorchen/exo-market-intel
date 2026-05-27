@@ -24,6 +24,10 @@ st.set_page_config(
 
 init_db()
 
+# Auto-seed: add any entities from entities.py not yet in the DB (INSERT OR IGNORE — never overwrites)
+from pipeline.seed_entities import seed_entities
+seed_entities()
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=60)

@@ -37,7 +37,7 @@ def seed_entities():
                 added += 1
 
             conn.execute(
-                """INSERT OR REPLACE INTO entity_registry
+                """INSERT OR IGNORE INTO entity_registry
                    (name, entity_type, states, country, us_reach, specialty,
                     current_exosome_use, ind_seeking, website, contact_info,
                     linkedin_url, priority_score, products, recent_deal,
