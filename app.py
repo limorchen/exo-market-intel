@@ -24,7 +24,11 @@ st.set_page_config(
 
 init_db()
 
-# Auto-seed: add any entities from entities.py not yet in the DB (INSERT OR IGNORE — never overwrites)
+# Auto-seed states: INSERT OR REPLACE so CSV edits propagate on every deploy
+from pipeline.seed_states import seed_states
+seed_states()
+
+# Auto-seed entities: INSERT OR IGNORE — adds new entries, never overwrites existing/manual edits
 from pipeline.seed_entities import seed_entities
 seed_entities()
 
