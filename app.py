@@ -119,11 +119,12 @@ def render_map(states_df: pd.DataFrame):
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
         legend_title_text="Risk Level",
         height=420,
+        dragmode=False,
         geo=dict(bgcolor="rgba(0,0,0,0)"),
         paper_bgcolor="rgba(0,0,0,0)",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": False, "displayModeBar": False})
 
     counts = df["risk_display"].value_counts()
     cols = st.columns(5)
