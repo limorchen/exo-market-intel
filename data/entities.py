@@ -649,7 +649,7 @@ entities = [
         "specialty": "interventional pain management, spine, joint, radiology",
         "current_exosome_use": "adjacent",
         "ind_seeking": 0,
-        "website": "https://www.regenerativesolutionsnj.com",
+        "website": "",
         "contact_info": "",
         "linkedin_url": "https://www.linkedin.com/in/dougspielmd",
         "notes": "NJ Institute for Pain Relief. Board-certified radiologist and ABIPP diplomate. Interventional pain management specialist. Cited in FL strategy document as a regenerative KOL; current web presence is NJ-based pain clinic with no explicit exosome services listed. Adjacent opportunity in interventional pain channel.",
