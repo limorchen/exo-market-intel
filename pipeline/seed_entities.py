@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from data.entities import entities
-from utils.db import get_conn, init_db
+from utils.db import get_conn, init_db, log_change
 from utils.scoring import calculate_score
 
 
@@ -36,7 +36,7 @@ def seed_entities():
             else:
                 added += 1
 
-            conn.execute(
+            cur = conn.execute(
                 """INSERT OR IGNORE INTO entity_registry
                    (name, entity_type, states, country, us_reach, specialty,
                     current_exosome_use, ind_seeking, website, contact_info,
@@ -61,16 +61,13 @@ def seed_entities():
                     today, active,
                 ),
             )
-            entity_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-            change_desc = (
-                f"Seeded {'(EXCLUDED — ind_seeking)' if ent.get('ind_seeking') else ''}: "
-                f"{ent['name']} | type={ent['entity_type']} | score={score}"
-            )
-            conn.execute(
-                "INSERT INTO update_log (entity_id, log_date, change_type, description, logged_by) VALUES (?,?,?,?,?)",
-                (entity_id, datetime.now(timezone.utc).isoformat(), "new", change_desc, "seed_entities"),
-            )
+            if cur.rowcount == 1:
+                label = "EXCLUDED — ind_seeking" if ent.get("ind_seeking") else ent["entity_type"]
+                log_change(
+                    conn, ent["name"], "new",
+                    f"Seeded: {ent['name']} | type={label} | score={score}",
+                    "seed_entities",
+                )
 
             if score < 3:
                 score_dist["0-3"] += 1

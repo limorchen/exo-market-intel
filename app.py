@@ -12,7 +12,7 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils.db import get_conn, init_db
+from utils.db import get_conn, init_db, log_change
 from utils.scoring import calculate_score
 
 st.set_page_config(
@@ -51,12 +51,13 @@ def load_update_log() -> pd.DataFrame:
     with get_conn() as conn:
         return pd.read_sql_query(
             """
-            SELECT ul.id, ul.log_date, er.name AS entity_name, ul.change_type,
-                   ul.description, ul.source_url, ul.logged_by
+            SELECT ul.id, ul.log_date,
+                   COALESCE(ul.entity_name, er.name, '—') AS entity_name,
+                   ul.change_type, ul.description, ul.source_url, ul.logged_by
             FROM update_log ul
             LEFT JOIN entity_registry er ON ul.entity_id = er.id
             ORDER BY ul.log_date DESC
-            LIMIT 30
+            LIMIT 50
             """,
             conn,
         )
@@ -339,12 +340,7 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
                          notes, source, datetime.now(timezone.utc).isoformat(),
                          0 if ind_seeking else 1),
                     )
-                    entity_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-                    conn.execute(
-                        "INSERT INTO update_log (entity_id, log_date, change_type, description, logged_by) VALUES (?,?,?,?,?)",
-                        (entity_id, datetime.now(timezone.utc).isoformat(), "new",
-                         f"Added {name} via dashboard form", "user"),
-                    )
+                    log_change(conn, name, "new", f"Added via dashboard form | type={entity_type} | score={score}", "user")
                 invalidate_cache()
                 st.sidebar.success(f"Added {name} (score: {score})")
                 st.rerun()

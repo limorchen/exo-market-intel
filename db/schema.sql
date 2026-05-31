@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS entity_registry (
 CREATE TABLE IF NOT EXISTS update_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entity_id INTEGER,
+    entity_name TEXT,
     log_date TEXT,
     change_type TEXT,
     description TEXT,
