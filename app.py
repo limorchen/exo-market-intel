@@ -254,9 +254,11 @@ def render_entities(entities_df: pd.DataFrame):
                 if row.get("manual_override_score"):
                     st.markdown(f"**Manual Override Score:** {row['manual_override_score']}")
             with c2:
-                st.markdown(f"**Website:** {row.get('website', '—')}")
+                _web = row.get('website', '')
+                st.markdown(f"**Website:** [{_web}]({_web})" if _web else "**Website:** —")
                 st.markdown(f"**Contact:** {row.get('contact_info', '—')}")
-                st.markdown(f"**LinkedIn:** {row.get('linkedin_url', '—')}")
+                _li = row.get('linkedin_url', '')
+                st.markdown(f"**LinkedIn:** [{_li}]({_li})" if _li else "**LinkedIn:** —")
                 st.markdown(f"**Source:** {row.get('source', '—')}")
                 st.markdown(f"**Active:** {'Yes' if row.get('active') else 'No (archived)'}")
                 st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
