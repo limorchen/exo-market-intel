@@ -728,23 +728,6 @@ entities = [
         "notes": "Institut Curie, Paris. Pioneer in exosome biology; co-authored MISEV guidelines. ind_seeking=1 — academic work directly informs IND science. active=0 per HARD RULE.",
         "source": "training_knowledge",
     },
-    {
-        "name": "Dr. Jorge Paz Rodriguez",
-        "entity_type": "KOL",
-        "states": "INTL",
-        "country": "CO",
-        "us_reach": 1,
-        "specialty": "stem cells, regenerative medicine, exosomes",
-        "current_exosome_use": "active",
-        "ind_seeking": 0,
-        "website": "",
-        "contact_info": "",
-        "linkedin_url": "",
-        "products": "exosome/stem cell treatments, CCCR clinical protocols, US-referral regenerative services",
-        "recent_deal": "",
-        "notes": "Bogota Colombia. Director of Colombian Center for Cellular Research (CCCR). Known for exosome and stem cell treatments; US-facing patient referral network. Presents at US conferences. TODO: verify website live.",
-        "source": "training_knowledge",
-    },
 
     # ─── MSO — NATIONAL NETWORKS ─────────────────────────────────────────────
 
