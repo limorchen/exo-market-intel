@@ -737,7 +737,7 @@ entities = [
         "specialty": "stem cells, regenerative medicine, exosomes",
         "current_exosome_use": "active",
         "ind_seeking": 0,
-        "website": "https://cccr.com.co",
+        "website": "",
         "contact_info": "",
         "linkedin_url": "",
         "products": "exosome/stem cell treatments, CCCR clinical protocols, US-referral regenerative services",
