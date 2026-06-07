@@ -74,23 +74,42 @@ _RISK_LABELS = {"low": "Low — Permissive", "medium": "Medium — Ambiguous", "
 
 # ── SECTION A — Legislation map ───────────────────────────────────────────────
 
-def render_map(states_df: pd.DataFrame):
+def _entity_hover_str(state_code: str, state_entities: dict) -> str:
+    """Return an HTML snippet listing entities for a given state code."""
+    ents = state_entities.get(state_code, [])
+    if not ents:
+        return "None tracked"
+    shown = ents[:7]
+    extra = len(ents) - 7
+    lines = "<br>".join(
+        f"&nbsp;• {name} <span style='color:#aaa'>({etype})</span>"
+        for name, etype in shown
+    )
+    if extra > 0:
+        lines += f"<br>&nbsp;&nbsp;<i>+{extra} more</i>"
+    return f"<b>{len(ents)} tracked</b><br>{lines}"
+
+
+def render_map(states_df: pd.DataFrame, entities_df: pd.DataFrame):
     st.subheader("Section A — US State Legislation Map")
 
     if states_df.empty:
         st.info("No state data loaded yet. Run `pipeline/seed_states.py` first.")
         return
 
+    # Build state_code → [(name, entity_type)] sorted by score desc
+    state_entities: dict[str, list] = {}
+    for _, row in entities_df[entities_df["active"] == 1].iterrows():
+        for sc in (row["states"] or "").split(","):
+            sc = sc.strip()
+            if sc and sc != "INTL":
+                state_entities.setdefault(sc, []).append((row["name"], row["entity_type"]))
+
     df = states_df.copy()
     df["risk_display"] = df["risk_level"].fillna("unknown").str.lower()
     df["color_order"] = df["risk_display"].map({"low": 0, "medium": 1, "high": 2, "unknown": 3, "unclear": 3}).fillna(3)
-    df["provisions_short"] = df["key_provisions"].fillna("").str[:120]
-    df["tooltip"] = (
-        "<b>" + df["state_name"] + "</b><br>"
-        + "Type: " + df["legislation_type"].fillna("unknown") + "<br>"
-        + "Risk: " + df["risk_display"] + "<br>"
-        + df["provisions_short"]
-    )
+    df["provisions_short"] = df["key_provisions"].fillna("").str[:140]
+    df["entities_str"] = df["state_code"].apply(lambda sc: _entity_hover_str(sc, state_entities))
 
     color_discrete_map = {
         "low": _RISK_COLORS["low"],
@@ -108,14 +127,25 @@ def render_map(states_df: pd.DataFrame):
         color_discrete_map=color_discrete_map,
         scope="usa",
         hover_name="state_name",
-        hover_data={"state_code": False, "risk_display": True, "legislation_type": True, "provisions_short": True},
-        labels={
-            "risk_display": "Risk Level",
-            "legislation_type": "Legislation Type",
-            "provisions_short": "Key Provisions",
-        },
+        hover_data={"state_code": False, "risk_display": False, "legislation_type": False,
+                    "provisions_short": False, "entities_str": False},
         category_orders={"risk_display": ["low", "medium", "high", "unknown", "unclear"]},
     )
+
+    # Build customdata array matching df row order and apply full hovertemplate
+    customdata = df[["risk_display", "legislation_type", "provisions_short", "entities_str"]].values
+    fig.update_traces(
+        customdata=customdata,
+        hovertemplate=(
+            "<b>%{hovertext}</b><br>"
+            "Risk: <b>%{customdata[0]}</b>&nbsp;&nbsp;|&nbsp;&nbsp;Type: %{customdata[1]}<br>"
+            "%{customdata[2]}<br>"
+            "<br>"
+            "%{customdata[3]}"
+            "<extra></extra>"
+        ),
+    )
+
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
         legend_title_text="Risk Level",
@@ -443,7 +473,7 @@ def main():
     log_df = load_update_log()
 
     render_sidebar_controls(entities_df)
-    render_map(states_df)
+    render_map(states_df, entities_df)
     st.divider()
     render_entities(entities_df)
     st.divider()
