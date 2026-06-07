@@ -132,19 +132,28 @@ def render_map(states_df: pd.DataFrame, entities_df: pd.DataFrame):
         category_orders={"risk_display": ["low", "medium", "high", "unknown", "unclear"]},
     )
 
-    # Build customdata array matching df row order and apply full hovertemplate
-    customdata = df[["risk_display", "legislation_type", "provisions_short", "entities_str"]].values
-    fig.update_traces(
-        customdata=customdata,
-        hovertemplate=(
-            "<b>%{hovertext}</b><br>"
-            "Risk: <b>%{customdata[0]}</b>&nbsp;&nbsp;|&nbsp;&nbsp;Type: %{customdata[1]}<br>"
-            "%{customdata[2]}<br>"
-            "<br>"
-            "%{customdata[3]}"
-            "<extra></extra>"
-        ),
+    # px.choropleth with discrete colors creates one trace per risk category, not one per
+    # state — so update_traces() with a flat array misaligns customdata. Instead, rebuild
+    # customdata in trace.locations order for each trace individually.
+    df_idx = df.set_index("state_code")
+
+    def _cd(loc: str) -> list:
+        if loc in df_idx.index:
+            r = df_idx.loc[loc]
+            return [r["risk_display"], r["legislation_type"], r["provisions_short"], r["entities_str"]]
+        return ["unknown", "unknown", "", "None tracked"]
+
+    _tmpl = (
+        "<b>%{hovertext}</b><br>"
+        "Risk: <b>%{customdata[0]}</b>&nbsp;&nbsp;|&nbsp;&nbsp;Type: %{customdata[1]}<br>"
+        "%{customdata[2]}<br>"
+        "<br>"
+        "%{customdata[3]}"
+        "<extra></extra>"
     )
+    for trace in fig.data:
+        trace.customdata = [_cd(loc) for loc in trace.locations]
+        trace.hovertemplate = _tmpl
 
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
