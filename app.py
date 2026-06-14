@@ -357,6 +357,16 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
         st.info("No active entities to plot.")
         return
 
+    bubble_types = sorted(df["entity_type"].dropna().unique().tolist())
+    sel_bubble_types = st.multiselect(
+        "Filter by Entity Type", bubble_types, default=bubble_types, key="gtm_bubble_type_filter"
+    )
+    if sel_bubble_types:
+        df = df[df["entity_type"].isin(sel_bubble_types)]
+    if df.empty:
+        st.info("No entities match the selected type filter.")
+        return
+
     with get_conn() as conn:
         df["readiness"] = df["current_exosome_use"].apply(
             lambda v: _READINESS_SCORE.get((v or "unknown").lower(), 1.0)
@@ -409,6 +419,32 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
     st.caption(
         "Best first-wave targets sit in the **top-right** (high readiness, favorable legislation) "
         "with large bubbles (strong reach/scale)."
+    )
+
+    st.markdown("##### Ranked Targets")
+    st.caption("Click any column header to sort.")
+    ranked_cols = ["name", "entity_type", "states", "gtm_score", "readiness",
+                   "legislation", "scale", "recent_deal"]
+    ranked = (
+        df[ranked_cols]
+        .rename(columns={
+            "name": "Name", "entity_type": "Type", "states": "States",
+            "gtm_score": "GTM Score", "readiness": "Readiness",
+            "legislation": "Legislation", "scale": "Scale", "recent_deal": "Recent Deal",
+        })
+        .sort_values("GTM Score", ascending=False)
+        .reset_index(drop=True)
+    )
+    st.dataframe(
+        ranked,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "GTM Score": st.column_config.NumberColumn("GTM Score", format="%.1f"),
+            "Readiness": st.column_config.NumberColumn("Readiness", format="%.1f"),
+            "Legislation": st.column_config.NumberColumn("Legislation", format="%.1f"),
+            "Scale": st.column_config.NumberColumn("Scale", format="%.1f"),
+        },
     )
 
 
