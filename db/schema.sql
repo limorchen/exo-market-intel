@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS entity_registry (
     notes TEXT,
     source TEXT,
     last_updated TEXT,
-    active INTEGER DEFAULT 1
+    active INTEGER DEFAULT 1,
+    gtm_score REAL,
+    pricing_tier TEXT DEFAULT 'unknown',
+    supplier_openness TEXT DEFAULT 'unknown'
 );
 
 CREATE TABLE IF NOT EXISTS update_log (

@@ -22,7 +22,13 @@ def init_db() -> None:
 
 
 def _migrate_db() -> None:
-    entity_cols = [("products", "TEXT"), ("recent_deal", "TEXT")]
+    entity_cols = [
+        ("products", "TEXT"),
+        ("recent_deal", "TEXT"),
+        ("gtm_score", "REAL"),
+        ("pricing_tier", "TEXT DEFAULT 'unknown'"),
+        ("supplier_openness", "TEXT DEFAULT 'unknown'"),
+    ]
     log_cols = [("entity_name", "TEXT")]
     with get_conn() as conn:
         for col, col_type in entity_cols:
@@ -35,6 +41,24 @@ def _migrate_db() -> None:
                 conn.execute(f"ALTER TABLE update_log ADD COLUMN {col} {col_type}")
             except Exception:
                 pass
+
+    _backfill_gtm_scores()
+
+
+def _backfill_gtm_scores() -> None:
+    from utils.scoring import calculate_gtm_score
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, states, current_exosome_use, notes, products, priority_score, ind_seeking "
+            "FROM entity_registry WHERE gtm_score IS NULL"
+        ).fetchall()
+        for row in rows:
+            gtm = calculate_gtm_score(
+                row["states"], row["current_exosome_use"], row["notes"], row["products"],
+                row["priority_score"], row["ind_seeking"], conn,
+            )
+            conn.execute("UPDATE entity_registry SET gtm_score=? WHERE id=?", (gtm, row["id"]))
 
 
 def log_change(

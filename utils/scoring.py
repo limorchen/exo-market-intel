@@ -1,8 +1,16 @@
 from __future__ import annotations
+import re
 import sqlite3
 
 
 _LEGISLATION_SCORE = {"low": 10, "medium": 6, "high": 3, "unknown": 2, "unclear": 2}
+
+_READINESS_SCORE = {"active": 10.0, "interested": 5.0, "adjacent": 3.0, "unknown": 1.0}
+
+_LOC_RE = re.compile(
+    r"(\d+)\+?\s*(?:US\s+)?(?:confirmed\s+)?(?:US\s+)?(?:clinic|location|practice|center|franchise)",
+    re.I,
+)
 
 _REACH_LARGE_STATES = {
     "CA", "TX", "FL", "NY", "PA", "IL", "OH", "GA", "NC", "MI",
@@ -70,3 +78,35 @@ def calculate_score(
     contact = _contact_score(website, contact_info)
     raw = leg * 0.35 + reach * 0.25 + eng * 0.25 + contact * 0.15
     return round(min(max(raw, 1.0), 10.0), 2)
+
+
+def _location_estimate(notes: str | None, products: str | None, states_str: str | None) -> int:
+    text = f"{notes or ''} {products or ''}"
+    nums = [int(n) for n in _LOC_RE.findall(text)]
+    codes = [s.strip() for s in (states_str or "").split(",") if s.strip()]
+    n_states = len(codes) if codes else 1
+    return max(max(nums), n_states) if nums else n_states
+
+
+def _scale_score(notes: str | None, products: str | None, states_str: str | None) -> float:
+    locs = _location_estimate(notes, products, states_str)
+    return round(min(10.0, (locs ** 0.5) * 2.2), 2)
+
+
+def calculate_gtm_score(
+    states: str | None,
+    current_exosome_use: str | None,
+    notes: str | None,
+    products: str | None,
+    priority_score: float | None,
+    ind_seeking: int,
+    conn: sqlite3.Connection,
+) -> float:
+    """Go-to-market priority: readiness (35%) + reach/scale (25%) + legislation favorability (20%) + priority score (20%)."""
+    if ind_seeking:
+        return 0.0
+    readiness = _READINESS_SCORE.get((current_exosome_use or "unknown").lower(), 1.0)
+    scale = _scale_score(notes, products, states)
+    leg = _legislation_score(states, conn)
+    raw = readiness * 0.35 + scale * 0.25 + leg * 0.20 + (priority_score or 0.0) * 0.20
+    return round(min(max(raw, 0.0), 10.0), 2)

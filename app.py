@@ -13,7 +13,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils.db import get_conn, init_db, log_change
-from utils.scoring import calculate_score
+from utils.scoring import calculate_gtm_score, calculate_score
 
 st.set_page_config(
     page_title="NurExone — Exosome Market Intelligence",
@@ -218,9 +218,16 @@ def render_entities(entities_df: pd.DataFrame):
         sel_specs = st.multiselect("Specialty", all_specs, default=all_specs)
 
         min_score = st.slider("Min Priority Score", 1.0, 10.0, 1.0, 0.5)
+        min_gtm = st.slider("Min GTM Score", 0.0, 10.0, 0.0, 0.5)
 
         engagement_opts = ["active", "interested", "adjacent", "unknown"]
         sel_engagement = st.multiselect("Exosome Engagement", engagement_opts, default=engagement_opts)
+
+        pricing_opts = sorted(entities_df["pricing_tier"].dropna().unique().tolist())
+        sel_pricing = st.multiselect("Pricing Tier", pricing_opts, default=pricing_opts)
+
+        openness_opts = sorted(entities_df["supplier_openness"].dropna().unique().tolist())
+        sel_openness = st.multiselect("Supplier Openness", openness_opts, default=openness_opts)
 
         show_archived = st.toggle("Show Archived", value=False)
 
@@ -237,18 +244,26 @@ def render_entities(entities_df: pd.DataFrame):
     if sel_specs:
         df = df[df["specialty"].isin(sel_specs)]
     df = df[df["priority_score"].fillna(0) >= min_score]
+    df = df[df["gtm_score"].fillna(0) >= min_gtm]
     if sel_engagement:
         df = df[df["current_exosome_use"].isin(sel_engagement)]
+    if sel_pricing:
+        df = df[df["pricing_tier"].isin(sel_pricing)]
+    if sel_openness:
+        df = df[df["supplier_openness"].isin(sel_openness)]
 
     st.caption(f"Showing {len(df)} entities (of {len(entities_df)} total)")
 
     display_cols = ["id", "name", "entity_type", "states", "specialty", "products",
-                    "current_exosome_use", "priority_score", "recent_deal", "website", "last_updated"]
+                    "current_exosome_use", "priority_score", "gtm_score", "pricing_tier",
+                    "supplier_openness", "recent_deal", "website", "last_updated"]
     rename_map = {
         "id": "ID", "name": "Name", "entity_type": "Type", "states": "States",
         "specialty": "Specialty", "products": "Products",
         "current_exosome_use": "Engagement",
-        "priority_score": "Score", "recent_deal": "Recent Deal",
+        "priority_score": "Score", "gtm_score": "GTM Score",
+        "pricing_tier": "Pricing Tier", "supplier_openness": "Supplier Openness",
+        "recent_deal": "Recent Deal",
         "website": "Website", "last_updated": "Updated",
     }
     show_df = df[display_cols].rename(columns=rename_map).reset_index(drop=True)
@@ -269,6 +284,7 @@ def render_entities(entities_df: pd.DataFrame):
         column_config={
             "Website": st.column_config.LinkColumn("Website"),
             "Score": st.column_config.NumberColumn("Score", format="%.1f"),
+            "GTM Score": st.column_config.NumberColumn("GTM Score", format="%.1f"),
             "🔥": st.column_config.TextColumn("🔥", width="small"),
             "Products": st.column_config.TextColumn("Products", width="medium"),
             "Recent Deal": st.column_config.TextColumn("Recent Deal", width="medium"),
@@ -291,6 +307,9 @@ def render_entities(entities_df: pd.DataFrame):
                 st.markdown(f"**Specialty:** {row.get('specialty', '—')}")
                 st.markdown(f"**Engagement:** {row.get('current_exosome_use', '—')}")
                 st.markdown(f"**Priority Score:** {row.get('priority_score', '—')}")
+                st.markdown(f"**GTM Score:** {row.get('gtm_score', '—')}")
+                st.markdown(f"**Pricing Tier:** {row.get('pricing_tier', '—')}")
+                st.markdown(f"**Supplier Openness:** {row.get('supplier_openness', '—')}")
                 if row.get("manual_override_score"):
                     st.markdown(f"**Manual Override Score:** {row['manual_override_score']}")
             with c2:
@@ -356,6 +375,11 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
             linkedin_url = st.text_input("LinkedIn URL")
             products = st.text_input("Products (comma-separated key products/brands)")
             recent_deal = st.text_input("Recent Deal (acquisition, partnership, or supply deal since 2024)")
+            pricing_tier = st.selectbox("Pricing Tier", ["unknown", "mass", "mid-market", "premium"])
+            supplier_openness = st.selectbox(
+                "Supplier Openness",
+                ["unknown", "multi-vendor (open)", "limited (selective)", "exclusive (single-source)"],
+            )
             notes = st.text_area("Notes")
             source = st.text_input("Source / How Discovered")
             submitted = st.form_submit_button("Add Entity")
@@ -366,18 +390,23 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
             else:
                 with get_conn() as conn:
                     score = calculate_score(states, engagement, website, contact_info, int(ind_seeking), conn)
+                    gtm_score = calculate_gtm_score(
+                        states, engagement, notes, products, score, int(ind_seeking), conn
+                    )
                     conn.execute(
                         """INSERT INTO entity_registry
                            (name, entity_type, states, country, us_reach, specialty,
                             current_exosome_use, ind_seeking, website, contact_info,
                             linkedin_url, priority_score, products, recent_deal,
-                            notes, source, last_updated, active)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            notes, source, last_updated, active, gtm_score,
+                            pricing_tier, supplier_openness)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (name, entity_type, states, country, int(us_reach), specialty,
                          engagement, int(ind_seeking), website, contact_info, linkedin_url,
                          score, products, recent_deal,
                          notes, source, datetime.now(timezone.utc).isoformat(),
-                         0 if ind_seeking else 1),
+                         0 if ind_seeking else 1, gtm_score,
+                         pricing_tier, supplier_openness),
                     )
                     log_change(conn, name, "new", f"Added via dashboard form | type={entity_type} | score={score}", "user")
                 invalidate_cache()
@@ -448,10 +477,20 @@ Filterable table of commercial partners across four categories:
 **Priority Score (1–10)** is auto-calculated from: legislation risk (35%) · geographic reach (25%) ·
 exosome engagement (25%) · contact completeness (15%).
 
+**GTM Score (0–10)** ranks entities for first-wave marketing outreach: exosome readiness (35%) ·
+reach/scale — clinic count or footprint, estimated from notes (25%) · legislation favorability (20%) ·
+Priority Score (20%). Click the column header to sort.
+
+**Pricing Tier** and **Supplier Openness** are manually-curated fields (default `unknown` until researched):
+- *Pricing Tier* — `mass`, `mid-market`, or `premium`, based on the entity's typical client base/positioning.
+- *Supplier Openness* — `multi-vendor (open)` (carries multiple brands, easy to add a new line),
+  `limited (selective)`, or `exclusive (single-source)` (locked to one supplier/parent company).
+
 **🔥 Recent Deal** marks entities with a confirmed acquisition, partnership, or distribution deal in the past 2 years.
 These are the highest-priority outreach targets — they are actively expanding and looking for vendors.
 
-Use the **sidebar filters** to narrow by Type, State, Specialty, Score, and Engagement level.
+Use the **sidebar filters** to narrow by Type, State, Specialty, Score, GTM Score, Engagement,
+Pricing Tier, and Supplier Openness.
 Click **Export Filtered Table (Excel)** in the sidebar to download your selection.
 
 ---

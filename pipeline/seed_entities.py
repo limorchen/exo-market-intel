@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from data.entities import entities
 from utils.db import get_conn, init_db, log_change
-from utils.scoring import calculate_score
+from utils.scoring import calculate_gtm_score, calculate_score
 
 
 def seed_entities():
@@ -36,13 +36,24 @@ def seed_entities():
             else:
                 added += 1
 
+            gtm_score = calculate_gtm_score(
+                ent.get("states"),
+                ent.get("current_exosome_use"),
+                ent.get("notes"),
+                ent.get("products"),
+                score,
+                int(ent.get("ind_seeking", 0)),
+                conn,
+            )
+
             cur = conn.execute(
                 """INSERT OR IGNORE INTO entity_registry
                    (name, entity_type, states, country, us_reach, specialty,
                     current_exosome_use, ind_seeking, website, contact_info,
                     linkedin_url, priority_score, products, recent_deal,
-                    notes, source, last_updated, active)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    notes, source, last_updated, active, gtm_score,
+                    pricing_tier, supplier_openness)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     ent["name"], ent["entity_type"],
                     ent.get("states", ""), ent.get("country", "US"),
@@ -58,7 +69,9 @@ def seed_entities():
                     ent.get("recent_deal", ""),
                     ent.get("notes", ""),
                     ent.get("source", "seed"),
-                    today, active,
+                    today, active, gtm_score,
+                    ent.get("pricing_tier", "unknown"),
+                    ent.get("supplier_openness", "unknown"),
                 ),
             )
             if cur.rowcount == 1:
