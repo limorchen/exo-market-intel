@@ -7,6 +7,8 @@ _LEGISLATION_SCORE = {"low": 10, "medium": 6, "high": 3, "unknown": 2, "unclear"
 
 _READINESS_SCORE = {"active": 10.0, "interested": 5.0, "adjacent": 3.0, "unknown": 1.0}
 
+_PRICING_TIER_SCORE = {"premium": 10.0, "mid-market": 6.0, "mass": 3.0, "unknown": 2.0}
+
 _LOC_RE = re.compile(
     r"(\d+)\+?\s*(?:US\s+)?(?:confirmed\s+)?(?:US\s+)?(?:clinic|location|practice|center|franchise)",
     re.I,
@@ -101,12 +103,26 @@ def calculate_gtm_score(
     priority_score: float | None,
     ind_seeking: int,
     conn: sqlite3.Connection,
+    pricing_tier: str | None = None,
 ) -> float:
-    """Go-to-market priority: readiness (35%) + reach/scale (25%) + legislation favorability (20%) + priority score (20%)."""
+    """Go-to-market priority: readiness (25%) + scale (15%) + legislation favorability
+    (15%) + priority score (15%) + pricing tier (30%).
+
+    Pricing tier carries the heaviest single weight: entities pricing their products/services
+    more aggressively (premium) tend to run on better margins and are more open to adopting
+    new/improved products — making them better first-wave targets.
+    """
     if ind_seeking:
         return 0.0
     readiness = _READINESS_SCORE.get((current_exosome_use or "unknown").lower(), 1.0)
     scale = _scale_score(notes, products, states)
     leg = _legislation_score(states, conn)
-    raw = readiness * 0.35 + scale * 0.25 + leg * 0.20 + (priority_score or 0.0) * 0.20
+    pricing = _PRICING_TIER_SCORE.get((pricing_tier or "unknown").lower(), 2.0)
+    raw = (
+        readiness * 0.25
+        + scale * 0.15
+        + leg * 0.15
+        + (priority_score or 0.0) * 0.15
+        + pricing * 0.30
+    )
     return round(min(max(raw, 0.0), 10.0), 2)

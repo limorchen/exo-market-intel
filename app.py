@@ -503,7 +503,8 @@ def render_sidebar_controls(entities_df: pd.DataFrame):
                 with get_conn() as conn:
                     score = calculate_score(states, engagement, website, contact_info, int(ind_seeking), conn)
                     gtm_score = calculate_gtm_score(
-                        states, engagement, notes, products, score, int(ind_seeking), conn
+                        states, engagement, notes, products, score, int(ind_seeking), conn,
+                        pricing_tier,
                     )
                     conn.execute(
                         """INSERT INTO entity_registry

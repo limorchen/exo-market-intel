@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from data.entities import entities
+from data.pricing_tiers import PRICING_TIERS
 from utils.db import get_conn, init_db, log_change
 from utils.scoring import calculate_gtm_score, calculate_score
 
@@ -36,6 +37,8 @@ def seed_entities():
             else:
                 added += 1
 
+            pricing_tier = ent.get("pricing_tier") or PRICING_TIERS.get(ent["name"], "unknown")
+
             gtm_score = calculate_gtm_score(
                 ent.get("states"),
                 ent.get("current_exosome_use"),
@@ -44,6 +47,7 @@ def seed_entities():
                 score,
                 int(ent.get("ind_seeking", 0)),
                 conn,
+                pricing_tier,
             )
 
             cur = conn.execute(
@@ -70,7 +74,7 @@ def seed_entities():
                     ent.get("notes", ""),
                     ent.get("source", "seed"),
                     today, active, gtm_score,
-                    ent.get("pricing_tier", "unknown"),
+                    pricing_tier,
                     ent.get("supplier_openness", "unknown"),
                 ),
             )

@@ -50,13 +50,13 @@ def _backfill_gtm_scores() -> None:
 
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, states, current_exosome_use, notes, products, priority_score, ind_seeking "
-            "FROM entity_registry WHERE gtm_score IS NULL"
+            "SELECT id, states, current_exosome_use, notes, products, priority_score, "
+            "ind_seeking, pricing_tier FROM entity_registry WHERE gtm_score IS NULL"
         ).fetchall()
         for row in rows:
             gtm = calculate_gtm_score(
                 row["states"], row["current_exosome_use"], row["notes"], row["products"],
-                row["priority_score"], row["ind_seeking"], conn,
+                row["priority_score"], row["ind_seeking"], conn, row["pricing_tier"],
             )
             conn.execute("UPDATE entity_registry SET gtm_score=? WHERE id=?", (gtm, row["id"]))
 
