@@ -7,13 +7,20 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils.db import get_conn, init_db, log_change
-from utils.scoring import calculate_gtm_score, calculate_score
+from utils.scoring import (
+    _READINESS_SCORE,
+    _legislation_score,
+    _scale_score,
+    calculate_gtm_score,
+    calculate_score,
+)
 
 st.set_page_config(
     page_title="NurExone — Exosome Market Intelligence",
@@ -336,6 +343,75 @@ def render_entities(entities_df: pd.DataFrame):
     )
 
 
+# ── SECTION B2 — GTM priority bubble chart ────────────────────────────────────
+
+def render_gtm_bubble_chart(entities_df: pd.DataFrame):
+    st.subheader("Section B2 — Go-to-Market Priority Map")
+    st.caption(
+        "Bubble size = estimated reach/scale (clinic count or footprint). "
+        "Color = entity type. ⭐ = confirmed recent deal (acquisition/partnership since 2024)."
+    )
+
+    df = entities_df[entities_df["active"] == 1].copy()
+    if df.empty:
+        st.info("No active entities to plot.")
+        return
+
+    with get_conn() as conn:
+        df["readiness"] = df["current_exosome_use"].apply(
+            lambda v: _READINESS_SCORE.get((v or "unknown").lower(), 1.0)
+        )
+        df["legislation"] = df["states"].apply(lambda s: _legislation_score(s, conn))
+        df["scale"] = df.apply(
+            lambda r: _scale_score(r["notes"], r["products"], r["states"]), axis=1
+        )
+
+    df["has_deal"] = df["recent_deal"].fillna("") != ""
+    df["marker_symbol"] = df["has_deal"].map({True: "star", False: "circle"})
+
+    # Jitter so entities sharing the same readiness/legislation score don't fully overlap
+    rng = np.random.default_rng(42)
+    df["x_jitter"] = df["legislation"] + rng.uniform(-0.35, 0.35, len(df))
+    df["y_jitter"] = df["readiness"] + rng.uniform(-0.35, 0.35, len(df))
+
+    fig = px.scatter(
+        df,
+        x="x_jitter",
+        y="y_jitter",
+        size="scale",
+        color="entity_type",
+        symbol="marker_symbol",
+        symbol_map={"star": "star", "circle": "circle"},
+        hover_name="name",
+        custom_data=["states", "gtm_score", "recent_deal", "current_exosome_use"],
+        size_max=38,
+    )
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{hovertext}</b><br>"
+            "States: %{customdata[0]}<br>"
+            "Engagement: %{customdata[3]}<br>"
+            "GTM Score: %{customdata[1]}<br>"
+            "Recent Deal: %{customdata[2]}"
+            "<extra></extra>"
+        )
+    )
+    fig.update_layout(
+        height=520,
+        xaxis_title="Legislation Favorability →",
+        yaxis_title="Exosome Readiness →",
+        xaxis=dict(range=[0.5, 11], showgrid=True),
+        yaxis=dict(range=[-0.5, 11], showgrid=True),
+        legend_title_text="Entity Type",
+        margin={"t": 20},
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption(
+        "Best first-wave targets sit in the **top-right** (high readiness, favorable legislation) "
+        "with large bubbles (strong reach/scale)."
+    )
+
+
 # ── SECTION C — Update log ────────────────────────────────────────────────────
 
 def render_update_log(log_df: pd.DataFrame):
@@ -495,6 +571,14 @@ Click **Export Filtered Table (Excel)** in the sidebar to download your selectio
 
 ---
 
+**Section B2 — Go-to-Market Priority Map**
+Bubble chart plotting active entities by **Exosome Readiness** (y-axis) vs **Legislation Favorability** (x-axis).
+Bubble size reflects estimated reach/scale (clinic count or multi-state footprint), and color marks entity type.
+Entities marked with a ⭐ have a confirmed recent deal. The **top-right, largest bubbles** are the best
+first-wave marketing targets.
+
+---
+
 **Adding a New Entity**
 Use the **Add Entity** form in the sidebar:
 1. **Name** and **Type** are required.
@@ -524,6 +608,8 @@ def main():
     render_map(states_df, entities_df)
     st.divider()
     render_entities(entities_df)
+    st.divider()
+    render_gtm_bubble_chart(entities_df)
     st.divider()
     render_update_log(log_df)
 
