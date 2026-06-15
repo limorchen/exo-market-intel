@@ -360,7 +360,7 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
             "|---|---|---|\n"
             "| Pricing Tier | 30% | premium=10, mid-market=6, mass=3, unknown=2 |\n"
             "| Exosome Readiness | 25% | active=10, interested=5, adjacent=3, unknown=1 |\n"
-            "| Scale / Reach | 15% | derived from estimated clinic count / footprint |\n"
+            "| Operation Scale | 15% | derived from estimated clinic count / footprint |\n"
             "| Legislation Favorability | 15% | low risk=10, medium=6, high=3, unknown=2 |\n"
             "| Priority Score | 15% | existing 1-10 legislation/reach/engagement/contact score |\n\n"
             "**Pricing Tier carries the heaviest weight**: entities pricing their products/services "
@@ -471,7 +471,7 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
             "name": "Name", "entity_type": "Type", "states": "States",
             "gtm_score": "GTM Score", "pricing_tier": "Pricing Tier",
             "pricing_basis": "Pricing Basis", "readiness": "Readiness",
-            "legislation": "Legislation", "scale": "Scale", "recent_deal": "Recent Deal",
+            "legislation": "Legislation", "scale": "Operation Scale", "recent_deal": "Recent Deal",
         })
         .sort_values("GTM Score", ascending=False)
         .reset_index(drop=True)
@@ -484,7 +484,7 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
             "GTM Score": st.column_config.NumberColumn("GTM Score", format="%.1f"),
             "Readiness": st.column_config.NumberColumn("Readiness", format="%.1f"),
             "Legislation": st.column_config.NumberColumn("Legislation", format="%.1f"),
-            "Scale": st.column_config.NumberColumn("Scale", format="%.1f"),
+            "Operation Scale": st.column_config.NumberColumn("Operation Scale", format="%.1f"),
             "Pricing Basis": st.column_config.TextColumn("Pricing Basis", width="large"),
         },
     )
