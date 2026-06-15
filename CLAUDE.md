@@ -1,4 +1,4 @@
-# NurExone — Exosome US Market Intelligence Dashboard
+# ExoRadar — NurExone Exosome Market & GTM Intelligence Dashboard
 
 Streamlit dashboard for tracking the US commercial exosome market. Covers state-level legislation risk, distributor/KOL/CME/MSO entity tracking, and automated priority scoring — focused exclusively on the commercial (non-IND) pathway.
 

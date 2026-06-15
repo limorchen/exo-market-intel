@@ -1,4 +1,4 @@
-"""NurExone Exosome Market Intelligence Dashboard."""
+"""ExoRadar — NurExone Exosome Market & GTM Intelligence Dashboard."""
 from __future__ import annotations
 
 import io
@@ -23,7 +23,7 @@ from utils.scoring import (
 )
 
 st.set_page_config(
-    page_title="NurExone — Exosome Market Intelligence",
+    page_title="ExoRadar — Exosome Market & GTM Intelligence",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -651,7 +651,7 @@ Use the **Add Entity** form in the sidebar:
 
 
 def main():
-    st.title("🔬 NurExone — Naive Exosome US Market Intelligence")
+    st.title("🎯 ExoRadar — US Exosome Market & GTM Intelligence")
     st.caption("Commercial (non-IND) pathway only. All entities reflect physician-administered or wellness/aesthetics use.")
 
     render_instructions()
