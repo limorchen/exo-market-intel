@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import io
+import math
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -379,10 +379,28 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
     df["has_deal"] = df["recent_deal"].fillna("") != ""
     df["marker_symbol"] = df["has_deal"].map({True: "star", False: "circle"})
 
-    # Jitter so entities sharing the same readiness/legislation score don't fully overlap
-    rng = np.random.default_rng(42)
-    df["x_jitter"] = df["legislation"] + rng.uniform(-0.35, 0.35, len(df))
-    df["y_jitter"] = df["readiness"] + rng.uniform(-0.35, 0.35, len(df))
+    # Spread entities sharing the same readiness/legislation score out into a
+    # sunflower pattern around that point, so dense clusters fan out instead
+    # of stacking on top of each other.
+    def _spread_offsets(n: int, max_radius: float = 1.6) -> list[tuple[float, float]]:
+        if n <= 1:
+            return [(0.0, 0.0)]
+        golden_angle = math.pi * (3 - math.sqrt(5))
+        return [
+            (
+                max_radius * math.sqrt((i + 0.5) / n) * math.cos(i * golden_angle),
+                max_radius * math.sqrt((i + 0.5) / n) * math.sin(i * golden_angle),
+            )
+            for i in range(n)
+        ]
+
+    df["x_jitter"] = df["legislation"].astype(float)
+    df["y_jitter"] = df["readiness"].astype(float)
+    for (leg, read), group in df.groupby(["legislation", "readiness"]):
+        offsets = _spread_offsets(len(group))
+        for (idx, _), (dx, dy) in zip(group.iterrows(), offsets):
+            df.loc[idx, "x_jitter"] = leg + dx
+            df.loc[idx, "y_jitter"] = read + dy
 
     fig = px.scatter(
         df,
@@ -394,7 +412,8 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
         symbol_map={"star": "star", "circle": "circle"},
         hover_name="name",
         custom_data=["states", "gtm_score", "recent_deal", "current_exosome_use"],
-        size_max=38,
+        size_max=26,
+        opacity=0.75,
     )
     fig.update_traces(
         hovertemplate=(
@@ -407,11 +426,11 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
         )
     )
     fig.update_layout(
-        height=520,
+        height=650,
         xaxis_title="Legislation Favorability →",
         yaxis_title="Exosome Readiness →",
-        xaxis=dict(range=[0.5, 11], showgrid=True),
-        yaxis=dict(range=[-0.5, 11], showgrid=True),
+        xaxis=dict(range=[-0.5, 12.5], showgrid=True),
+        yaxis=dict(range=[-2, 12.5], showgrid=True),
         legend_title_text="Entity Type",
         margin={"t": 20},
     )
