@@ -13,6 +13,7 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
+from data.pricing_tiers import get_pricing_basis
 from utils.db import get_conn, init_db, log_change
 from utils.scoring import (
     _READINESS_SCORE,
@@ -352,6 +353,23 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
         "Color = entity type. ⭐ = confirmed recent deal (acquisition/partnership since 2024)."
     )
 
+    with st.expander("How is GTM Score calculated?"):
+        st.markdown(
+            "GTM Score (0-10) weights five factors:\n\n"
+            "| Factor | Weight | Scoring |\n"
+            "|---|---|---|\n"
+            "| Pricing Tier | 30% | premium=10, mid-market=6, mass=3, unknown=2 |\n"
+            "| Exosome Readiness | 25% | active=10, interested=5, adjacent=3, unknown=1 |\n"
+            "| Scale / Reach | 15% | derived from estimated clinic count / footprint |\n"
+            "| Legislation Favorability | 15% | low risk=10, medium=6, high=3, unknown=2 |\n"
+            "| Priority Score | 15% | existing 1-10 legislation/reach/engagement/contact score |\n\n"
+            "**Pricing Tier carries the heaviest weight**: entities pricing their products/services "
+            "more aggressively run on better margins and tend to be more open to adopting new/improved "
+            "products — making them better first-wave GTM targets. Tiers are assigned per segment "
+            "(distributor B2B vial pricing, MSO/KOL patient-facing session pricing, CME course pricing) "
+            "so comparisons stay apples-to-apples — see the **Pricing Basis** column in the ranked table below."
+        )
+
     df = entities_df[entities_df["active"] == 1].copy()
     if df.empty:
         st.info("No active entities to plot.")
@@ -442,13 +460,17 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
 
     st.markdown("##### Ranked Targets")
     st.caption("Click any column header to sort.")
-    ranked_cols = ["name", "entity_type", "states", "gtm_score", "readiness",
-                   "legislation", "scale", "recent_deal"]
+    df["pricing_basis"] = df.apply(
+        lambda r: get_pricing_basis(r["entity_type"], r["pricing_tier"], r["name"]), axis=1
+    )
+    ranked_cols = ["name", "entity_type", "states", "gtm_score", "pricing_tier",
+                   "pricing_basis", "readiness", "legislation", "scale", "recent_deal"]
     ranked = (
         df[ranked_cols]
         .rename(columns={
             "name": "Name", "entity_type": "Type", "states": "States",
-            "gtm_score": "GTM Score", "readiness": "Readiness",
+            "gtm_score": "GTM Score", "pricing_tier": "Pricing Tier",
+            "pricing_basis": "Pricing Basis", "readiness": "Readiness",
             "legislation": "Legislation", "scale": "Scale", "recent_deal": "Recent Deal",
         })
         .sort_values("GTM Score", ascending=False)
@@ -463,6 +485,7 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
             "Readiness": st.column_config.NumberColumn("Readiness", format="%.1f"),
             "Legislation": st.column_config.NumberColumn("Legislation", format="%.1f"),
             "Scale": st.column_config.NumberColumn("Scale", format="%.1f"),
+            "Pricing Basis": st.column_config.TextColumn("Pricing Basis", width="large"),
         },
     )
 

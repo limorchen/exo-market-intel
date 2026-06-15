@@ -150,3 +150,37 @@ PRICING_TIERS: dict[str, str] = {
     "Anderson Longevity Clinic": "mass",
     "Optimize Wellness & Aesthetics": "mass",
 }
+
+
+# Segment + tier benchmark description, shown for entities without an
+# entity-specific confirmed price (see PRICING_BASIS_OVERRIDES below).
+PRICING_BASIS: dict[tuple[str, str], str] = {
+    ("distributor", "premium"): "Branded high-potency MSC exosome line, ~$800-1,300+/vial",
+    ("distributor", "mid-market"): "Broad regenerative-biologics catalog — exosomes one SKU among PRP/allografts/peptides",
+    ("distributor", "mass"): "Large diversified pharma/medical distributor — exosomes a negligible commodity line",
+    ("MSO", "premium"): "Systemic/orthopedic exosome protocol or concierge longevity program, ~$2,500-10,000+ per cycle/membership",
+    ("MSO", "mid-market"): "Dedicated exosome facial/hair-restoration line at independent medspa, ~$700-2,500/session",
+    ("MSO", "mass"): "Low-cost exosome add-on at high-volume franchise wellness chain, ~$200-700/session",
+    ("KOL", "premium"): "Boutique/concierge specialist practice, systemic exosome injections, ~$2,500-10,000+ per protocol",
+    ("CME", "premium"): "Hands-on certification with live-patient procedures / high-end summit, ~$3,000-7,000+",
+    ("CME", "mid-market"): "Large annual congress/membership registration, ~$1,000-3,000",
+    ("CME", "mass"): "Institution-subsidized CME credits, low/no cost",
+}
+
+# Entity-specific confirmed prices from web research (override the generic
+# segment+tier benchmark above when available).
+PRICING_BASIS_OVERRIDES: dict[str, str] = {
+    "R3 Stem Cell": "Confirmed: $3,950-10,500 per 100B-exosome treatment; combo packages up to $10,500",
+    "QC Kinetix": "Confirmed: $2,500-10,000 per regenerative treatment cycle",
+    "Fountain Life": "Confirmed: $2,995-21,500/yr membership tiers (CORE to APEX)",
+    "Empire Medical Training — Exosome CME": "Confirmed: $1,699-1,899 exosome certification course",
+    "Kimera Labs": "Confirmed: ~$950/vial (XoGlo branded MSC exosome line)",
+    "Benev Company (ExoCoBio)": "Confirmed: $800-1,300/vial (ERC+ branded MSC exosome line)",
+}
+
+
+def get_pricing_basis(entity_type: str, pricing_tier: str, name: str) -> str:
+    """Return the pricing evidence used to assign this entity's tier."""
+    if name in PRICING_BASIS_OVERRIDES:
+        return PRICING_BASIS_OVERRIDES[name]
+    return PRICING_BASIS.get((entity_type, pricing_tier), "No comparable pricing data found — defaulted to 'unknown'")
