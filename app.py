@@ -305,8 +305,21 @@ def render_entities(entities_df: pd.DataFrame):
     if "entity_detail_name" not in st.session_state:
         st.session_state["entity_detail_name"] = "—"
 
-    toggle_label = "▼ Entity Detail View" if st.session_state["entity_section_open"] else "▶ Entity Detail View"
-    if st.button(toggle_label, key="entity_section_toggle", use_container_width=False):
+    arrow = "▼" if st.session_state["entity_section_open"] else "▶"
+    st.markdown(
+        f"""<style>
+        div[data-testid="stButton"] button[kind="secondary"]#entity_toggle {{
+            font-size: 1.2rem; font-weight: 700;
+        }}
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        f"{arrow}  Entity Detail View",
+        key="entity_section_toggle",
+        use_container_width=True,
+        type="primary",
+    ):
         st.session_state["entity_section_open"] = not st.session_state["entity_section_open"]
         st.rerun()
 
