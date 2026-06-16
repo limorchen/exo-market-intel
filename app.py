@@ -300,37 +300,37 @@ def render_entities(entities_df: pd.DataFrame):
     )
 
     # Click-to-expand entity profile
-    st.markdown("#### Entity Detail View")
-    if len(df) > 0:
-        sel_name = st.selectbox("Select entity to expand", ["—"] + df["name"].tolist())
-        if sel_name != "—":
-            row = df[df["name"] == sel_name].iloc[0]
-            if row.get("recent_deal"):
-                st.success(f"🔥 **Recent Deal:** {row['recent_deal']}")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"**Name:** {row['name']}")
-                st.markdown(f"**Type:** {row['entity_type']}")
-                st.markdown(f"**States:** {row['states']}")
-                st.markdown(f"**Specialty:** {row.get('specialty', '—')}")
-                st.markdown(f"**Engagement:** {row.get('current_exosome_use', '—')}")
-                st.markdown(f"**Priority Score:** {row.get('priority_score', '—')}")
-                st.markdown(f"**GTM Score:** {row.get('gtm_score', '—')}")
-                st.markdown(f"**Pricing Tier:** {row.get('pricing_tier', '—')}")
-                st.markdown(f"**Supplier Openness:** {row.get('supplier_openness', '—')}")
-                if row.get("manual_override_score"):
-                    st.markdown(f"**Manual Override Score:** {row['manual_override_score']}")
-            with c2:
-                _web = row.get('website', '')
-                st.markdown(f"**Website:** [{_web}]({_web})" if _web else "**Website:** —")
-                st.markdown(f"**Contact:** {row.get('contact_info', '—')}")
-                _li = row.get('linkedin_url', '')
-                st.markdown(f"**LinkedIn:** [{_li}]({_li})" if _li else "**LinkedIn:** —")
-                st.markdown(f"**Source:** {row.get('source', '—')}")
-                st.markdown(f"**Active:** {'Yes' if row.get('active') else 'No (archived)'}")
-                st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
-            st.markdown(f"**Products:** {row.get('products', '—')}")
-            st.markdown(f"**Notes:** {row.get('notes', '—')}")
+    with st.expander("#### Entity Detail View", expanded=True):
+        if len(df) > 0:
+            sel_name = st.selectbox("Select entity to expand", ["—"] + df["name"].tolist())
+            if sel_name != "—":
+                row = df[df["name"] == sel_name].iloc[0]
+                if row.get("recent_deal"):
+                    st.success(f"🔥 **Recent Deal:** {row['recent_deal']}")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f"**Name:** {row['name']}")
+                    st.markdown(f"**Type:** {row['entity_type']}")
+                    st.markdown(f"**States:** {row['states']}")
+                    st.markdown(f"**Specialty:** {row.get('specialty', '—')}")
+                    st.markdown(f"**Engagement:** {row.get('current_exosome_use', '—')}")
+                    st.markdown(f"**Priority Score:** {row.get('priority_score', '—')}")
+                    st.markdown(f"**GTM Score:** {row.get('gtm_score', '—')}")
+                    st.markdown(f"**Pricing Tier:** {row.get('pricing_tier', '—')}")
+                    st.markdown(f"**Supplier Openness:** {row.get('supplier_openness', '—')}")
+                    if row.get("manual_override_score"):
+                        st.markdown(f"**Manual Override Score:** {row['manual_override_score']}")
+                with c2:
+                    _web = row.get('website', '')
+                    st.markdown(f"**Website:** [{_web}]({_web})" if _web else "**Website:** —")
+                    st.markdown(f"**Contact:** {row.get('contact_info', '—')}")
+                    _li = row.get('linkedin_url', '')
+                    st.markdown(f"**LinkedIn:** [{_li}]({_li})" if _li else "**LinkedIn:** —")
+                    st.markdown(f"**Source:** {row.get('source', '—')}")
+                    st.markdown(f"**Active:** {'Yes' if row.get('active') else 'No (archived)'}")
+                    st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
+                st.markdown(f"**Products:** {row.get('products', '—')}")
+                st.markdown(f"**Notes:** {row.get('notes', '—')}")
 
     # Export
     buf = io.BytesIO()
