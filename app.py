@@ -300,7 +300,7 @@ def render_entities(entities_df: pd.DataFrame):
     )
 
     # Click-to-expand entity profile
-    with st.expander("#### Entity Detail View", expanded=True):
+    with st.expander("Entity Detail View", expanded=True):
         if len(df) > 0:
             sel_name = st.selectbox("Select entity to expand", ["—"] + df["name"].tolist())
             if sel_name != "—":
