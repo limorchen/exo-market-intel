@@ -450,7 +450,9 @@ def render_gtm_bubble_chart(entities_df: pd.DataFrame):
         xaxis=dict(range=[-0.5, 12.5], showgrid=True),
         yaxis=dict(range=[-2, 12.5], showgrid=True),
         legend_title_text="Entity Type",
-        margin={"t": 20},
+        title="GTM Priority Map — Exosome Market Entities",
+        title_x=0.5,
+        margin={"t": 60},
     )
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
