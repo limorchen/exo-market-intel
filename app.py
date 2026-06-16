@@ -300,26 +300,25 @@ def render_entities(entities_df: pd.DataFrame):
     )
 
     # Click-to-expand entity profile
-    st.markdown("#### Entity Detail View")
-    if len(df) > 0:
-        if "entity_detail_open" not in st.session_state:
-            st.session_state["entity_detail_open"] = False
-        if "entity_detail_name" not in st.session_state:
-            st.session_state["entity_detail_name"] = "—"
+    if "entity_section_open" not in st.session_state:
+        st.session_state["entity_section_open"] = True
+    if "entity_detail_name" not in st.session_state:
+        st.session_state["entity_detail_name"] = "—"
 
-        sel_name = st.selectbox(
-            "Select entity to view",
-            ["—"] + df["name"].tolist(),
-            index=(["—"] + df["name"].tolist()).index(st.session_state["entity_detail_name"])
-                  if st.session_state["entity_detail_name"] in df["name"].tolist() else 0,
-            key="entity_detail_select",
-        )
+    toggle_label = "▼ Entity Detail View" if st.session_state["entity_section_open"] else "▶ Entity Detail View"
+    if st.button(toggle_label, key="entity_section_toggle", use_container_width=False):
+        st.session_state["entity_section_open"] = not st.session_state["entity_section_open"]
+        st.rerun()
+
+    if st.session_state["entity_section_open"] and len(df) > 0:
+        names = ["—"] + df["name"].tolist()
+        idx = names.index(st.session_state["entity_detail_name"]) if st.session_state["entity_detail_name"] in names else 0
+        sel_name = st.selectbox("Select entity to view", names, index=idx, key="entity_detail_select")
         if sel_name != st.session_state["entity_detail_name"]:
             st.session_state["entity_detail_name"] = sel_name
-            st.session_state["entity_detail_open"] = sel_name != "—"
             st.rerun()
 
-        if st.session_state["entity_detail_open"] and sel_name != "—":
+        if sel_name != "—":
             row = df[df["name"] == sel_name].iloc[0]
             if row.get("recent_deal"):
                 st.success(f"🔥 **Recent Deal:** {row['recent_deal']}")
@@ -347,10 +346,6 @@ def render_entities(entities_df: pd.DataFrame):
                 st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
             st.markdown(f"**Products:** {row.get('products', '—')}")
             st.markdown(f"**Notes:** {row.get('notes', '—')}")
-            if st.button("✕ Close detail"):
-                st.session_state["entity_detail_open"] = False
-                st.session_state["entity_detail_name"] = "—"
-                st.rerun()
 
     # Export
     buf = io.BytesIO()
