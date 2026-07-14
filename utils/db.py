@@ -28,6 +28,7 @@ def _migrate_db() -> None:
         ("gtm_score", "REAL"),
         ("pricing_tier", "TEXT DEFAULT 'unknown'"),
         ("supplier_openness", "TEXT DEFAULT 'unknown'"),
+        ("brands_carried", "TEXT"),
     ]
     log_cols = [("entity_name", "TEXT")]
     with get_conn() as conn:
@@ -43,6 +44,25 @@ def _migrate_db() -> None:
                 pass
 
     _backfill_gtm_scores()
+    _backfill_brands_carried()
+
+
+def _backfill_brands_carried() -> None:
+    """One-time fill of brands_carried for entities with researched values in
+    data/entities.py — INSERT OR IGNORE in seed_entities never touches rows
+    that already exist, so already-seeded databases need this explicit UPDATE."""
+    from data.entities import entities
+
+    with get_conn() as conn:
+        for ent in entities:
+            brands = ent.get("brands_carried")
+            if not brands:
+                continue
+            conn.execute(
+                "UPDATE entity_registry SET brands_carried=? "
+                "WHERE name=? AND (brands_carried IS NULL OR brands_carried='')",
+                (brands, ent["name"]),
+            )
 
 
 def _backfill_gtm_scores() -> None:

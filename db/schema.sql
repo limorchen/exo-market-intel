@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS entity_registry (
     active INTEGER DEFAULT 1,
     gtm_score REAL,
     pricing_tier TEXT DEFAULT 'unknown',
-    supplier_openness TEXT DEFAULT 'unknown'
+    supplier_openness TEXT DEFAULT 'unknown',
+    brands_carried TEXT
 );
 
 CREATE TABLE IF NOT EXISTS update_log (

@@ -56,8 +56,8 @@ def seed_entities():
                     current_exosome_use, ind_seeking, website, contact_info,
                     linkedin_url, priority_score, products, recent_deal,
                     notes, source, last_updated, active, gtm_score,
-                    pricing_tier, supplier_openness)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    pricing_tier, supplier_openness, brands_carried)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     ent["name"], ent["entity_type"],
                     ent.get("states", ""), ent.get("country", "US"),
@@ -76,6 +76,7 @@ def seed_entities():
                     today, active, gtm_score,
                     pricing_tier,
                     ent.get("supplier_openness", "unknown"),
+                    ent.get("brands_carried", ""),
                 ),
             )
             if cur.rowcount == 1:
