@@ -279,6 +279,15 @@ def render_entities(entities_df: pd.DataFrame):
     # Add deal indicator column
     show_df.insert(1, "🔥", show_df["Recent Deal"].apply(lambda x: "🔥" if x else ""))
 
+    # LinkColumn can only show custom per-row text via a regex captured from the
+    # URL itself, so append the entity name as a URL fragment purely for display —
+    # fragments are inert on click (ignored by the browser/server on navigation).
+    def _name_link(row):
+        href = row["Website"] if pd.notna(row["Website"]) and row["Website"] else "#"
+        return f"{href}#{row['Name']}"
+
+    show_df["Name"] = show_df.apply(_name_link, axis=1)
+
     def _highlight_deals(row):
         color = "background-color: #fff8e1; font-weight: 500;" if row.get("Recent Deal") else ""
         return [color] * len(row)
@@ -290,6 +299,7 @@ def render_entities(entities_df: pd.DataFrame):
         use_container_width=True,
         hide_index=True,
         column_config={
+            "Name": st.column_config.LinkColumn("Name", display_text=r"#([^#]*)$"),
             "Website": st.column_config.LinkColumn("Website"),
             "Score": st.column_config.NumberColumn("Score", format="%.1f"),
             "GTM Score": st.column_config.NumberColumn("GTM Score", format="%.1f"),
