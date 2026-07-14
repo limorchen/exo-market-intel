@@ -263,11 +263,12 @@ def render_entities(entities_df: pd.DataFrame):
     st.caption(f"Showing {len(df)} entities (of {len(entities_df)} total)")
 
     display_cols = ["id", "name", "entity_type", "states", "specialty", "products",
-                    "current_exosome_use", "priority_score", "gtm_score", "pricing_tier",
-                    "supplier_openness", "recent_deal", "website", "last_updated"]
+                    "brands_carried", "current_exosome_use", "priority_score", "gtm_score",
+                    "pricing_tier", "supplier_openness", "recent_deal", "website", "last_updated"]
     rename_map = {
         "id": "ID", "name": "Name", "entity_type": "Type", "states": "States",
         "specialty": "Specialty", "products": "Products",
+        "brands_carried": "Brands Carried",
         "current_exosome_use": "Engagement",
         "priority_score": "Score", "gtm_score": "GTM Score",
         "pricing_tier": "Pricing Tier", "supplier_openness": "Supplier Openness",
@@ -275,6 +276,7 @@ def render_entities(entities_df: pd.DataFrame):
         "website": "Website", "last_updated": "Updated",
     }
     show_df = df[display_cols].rename(columns=rename_map).reset_index(drop=True)
+    show_df["Brands Carried"] = show_df["Brands Carried"].fillna("")
 
     # Add deal indicator column
     show_df.insert(1, "🔥", show_df["Recent Deal"].apply(lambda x: "🔥" if x else ""))
@@ -305,6 +307,7 @@ def render_entities(entities_df: pd.DataFrame):
             "GTM Score": st.column_config.NumberColumn("GTM Score", format="%.1f"),
             "🔥": st.column_config.TextColumn("🔥", width="small"),
             "Products": st.column_config.TextColumn("Products", width="medium"),
+            "Brands Carried": st.column_config.TextColumn("Brands Carried", width="medium"),
             "Recent Deal": st.column_config.TextColumn("Recent Deal", width="medium"),
         },
     )
@@ -368,6 +371,7 @@ def render_entities(entities_df: pd.DataFrame):
                 st.markdown(f"**Active:** {'Yes' if row.get('active') else 'No (archived)'}")
                 st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
             st.markdown(f"**Products:** {row.get('products', '—')}")
+            st.markdown(f"**Brands Carried:** {row.get('brands_carried') or '—'}")
             st.markdown(f"**Notes:** {row.get('notes', '—')}")
 
     # Export
