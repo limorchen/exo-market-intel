@@ -238,6 +238,7 @@ def render_entities(entities_df: pd.DataFrame):
         sel_openness = st.multiselect("Supplier Openness", openness_opts, default=openness_opts)
 
         show_archived = st.toggle("Show Archived", value=False)
+        brands_only = st.toggle("Known Brands Carried only", value=False)
 
     df = entities_df.copy()
     if not show_archived:
@@ -259,6 +260,8 @@ def render_entities(entities_df: pd.DataFrame):
         df = df[df["pricing_tier"].isin(sel_pricing)]
     if sel_openness:
         df = df[df["supplier_openness"].isin(sel_openness)]
+    if brands_only:
+        df = df[df["brands_carried"].fillna("") != ""]
 
     st.caption(f"Showing {len(df)} entities (of {len(entities_df)} total)")
 
@@ -692,8 +695,12 @@ Priority Score (20%). Click the column header to sort.
 **🔥 Recent Deal** marks entities with a confirmed acquisition, partnership, or distribution deal in the past 2 years.
 These are the highest-priority outreach targets — they are actively expanding and looking for vendors.
 
+**Brands Carried** lists which named exosome manufacturer brand(s) a distributor/MSO carries, sourced from
+researched notes — populated for a subset of entities so far, blank elsewhere pending research. Toggle
+**Known Brands Carried only** in the sidebar to filter down to just the researched rows.
+
 Use the **sidebar filters** to narrow by Type, State, Specialty, Score, GTM Score, Engagement,
-Pricing Tier, and Supplier Openness.
+Pricing Tier, Supplier Openness, and Known Brands Carried.
 Click **Export Filtered Table (Excel)** in the sidebar to download your selection.
 
 ---
