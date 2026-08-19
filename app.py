@@ -299,10 +299,13 @@ def render_entities(entities_df: pd.DataFrame):
 
     styled = show_df.style.apply(_highlight_deals, axis=1)
 
-    st.dataframe(
+    st.caption("Click a row to open its Entity Detail View below — clicking Name/Website still opens the link.")
+    table_event = st.dataframe(
         styled,
         use_container_width=True,
         hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
         column_config={
             "Name": st.column_config.LinkColumn("Name", display_text=r"#([^#]*)$"),
             "Website": st.column_config.LinkColumn("Website"),
@@ -320,6 +323,17 @@ def render_entities(entities_df: pd.DataFrame):
         st.session_state["entity_section_open"] = True
     if "entity_detail_name" not in st.session_state:
         st.session_state["entity_detail_name"] = "—"
+
+    selected_rows = table_event.selection.rows if table_event and table_event.selection else []
+    if selected_rows and selected_rows[0] < len(df):
+        clicked_name = df.iloc[selected_rows[0]]["name"]
+        if clicked_name != st.session_state["entity_detail_name"]:
+            st.session_state["entity_detail_name"] = clicked_name
+            # The selectbox below has its own widget key ("entity_detail_select");
+            # once rendered, that key's session_state value wins over `index=` on
+            # every later rerun, so it must be set directly here to stay in sync.
+            st.session_state["entity_detail_select"] = clicked_name
+            st.session_state["entity_section_open"] = True
 
     arrow = "▼" if st.session_state["entity_section_open"] else "▶"
     st.markdown(
