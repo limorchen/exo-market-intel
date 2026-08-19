@@ -1353,7 +1353,7 @@ entities = [
         "linkedin_url": "",
         "products": "exosome add-ons, PRP, platelet-rich fibrin, bioidentical hormones, NAD+, IV therapy, laser aesthetics",
         "recent_deal": "",
-        "notes": "Founded 2001 by Dr. Gustav Lo. 6 confirmed MI locations: Ann Arbor, Bloomfield Hills, Chelsea, East Lansing, Suttons Bay, Traverse City. RegenCen is the integrated regenerative medicine brand co-located at CSLC aesthetic practices. Confirmed exosome add-ons offered at every location. Multi-location, non-proprietary supplier — confirmed third-party exosome buyer. Also operates in FL.",
+        "notes": "Founded 2001 by Dr. Gustav Lo. 6 confirmed MI locations: Ann Arbor, Bloomfield Hills, Chelsea, East Lansing, Suttons Bay, Traverse City. RegenCen is the integrated regenerative medicine brand co-located at CSLC aesthetic practices. CORRECTION (2026-08): verified directly — exosomes are NOT mentioned on the homepage or main service menu (which centers on hormone therapy, IV/NAD+, peptides, PRF, and weight management). The only confirmed exosome mention is on the dedicated hair-loss page (regencen.com/treatment/hair-loss-treatment/): 'medical-grade minoxidil, finasteride, and exosomes for hair loss' — a narrow topical add-on, not a broad multi-location offering. Prior 'confirmed exosome add-ons offered at every location' claim was an overstatement and has been corrected. current_exosome_use=active still holds (exosomes are genuinely offered), but treat as a narrow hair-restoration entry point, not a full-menu exosome buyer. Also operates in FL.",
         "source": "web_research_2026",
     },
     {
