@@ -33,6 +33,8 @@ app.py                  # Streamlit entry point
 data/
   entities.py           # Seed data — all entity records
   states_seed.csv       # Seed data — state legislation records
+  pricing_tiers.py      # Manual pricing-tier assignments per entity
+  people_linkedin.py    # Verified name -> LinkedIn URL map for Notes auto-linking
 db/
   schema.sql            # SQLite schema
   exo_market.db         # Auto-created SQLite database
@@ -81,6 +83,12 @@ IND-seeking entities are always scored 0.
 - Must have verifiable web presence
 - Entities using autologous/patient-derived material only → `current_exosome_use: adjacent`
 - IND-seeking entities → `ind_seeking: 1`, excluded from dashboard
+
+## Entity Detail View & Notes Linking
+
+Section B's entity table supports row selection (`st.dataframe(..., on_select="rerun", selection_mode="single-row")`): clicking a row (checkbox or elsewhere in the row, but not the `Website` LinkColumn) opens that entity's full profile in the Entity Detail View panel below. Selection is synced into `st.session_state["entity_detail_name"]` and mirrored into the dropdown's own key (`st.session_state["entity_detail_select"]`) — the dropdown widget ignores its `index=` argument once it has a stored session-state value, so both the tracking variable and the widget's own key must be set together when driving it programmatically from the table click.
+
+The Notes field in the detail panel is passed through `linkify_people()` (app.py), which turns known founder/executive names into LinkedIn links using the curated map in `data/people_linkedin.py`. Only names with a verified profile (bio/title/org cross-referenced) are included — add new entries there as more people get researched; unmatched names stay plain text rather than risk linking the wrong person.
 
 ## Database Migration
 

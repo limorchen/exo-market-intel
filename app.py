@@ -721,6 +721,15 @@ Use the **sidebar filters** to narrow by Type, State, Specialty, Score, GTM Scor
 Pricing Tier, Supplier Openness, and Known Brands Carried.
 Click **Export Filtered Table (Excel)** in the sidebar to download your selection.
 
+**Entity Detail View** — click any row in the table (the checkbox on the left, or anywhere in the
+row except the Website column) to open that entity's full profile below: website, contact, LinkedIn,
+pricing tier, scores, and notes. The **Website** column stays a live clickable link independent of
+row selection — clicking it opens the site, clicking elsewhere in the row selects it. You can also
+pick an entity from the dropdown instead; both stay in sync. Named founders/executives mentioned in
+**Notes** are automatically linked to their LinkedIn profile where a verified match exists (curated
+in `data/people_linkedin.py`) — unmatched names are left as plain text rather than risk linking the
+wrong person.
+
 ---
 
 **Section B2 — Go-to-Market Priority Map**

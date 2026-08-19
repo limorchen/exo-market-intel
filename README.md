@@ -5,7 +5,9 @@ A Streamlit dashboard for tracking the US commercial exosome market. Covers stat
 ## Features
 
 - **Legislation Map** — choropleth of all 50 states color-coded by regulatory risk (low / medium / high / unknown), with a filterable detail table
-- **Entity Registry** — filterable, sortable table of distributors, KOLs, CME providers, and MSOs with priority scores; click-to-expand entity profiles and Excel export
+- **Entity Registry** — filterable, sortable table of distributors, KOLs, CME providers, and MSOs with priority scores and Excel export
+- **Click-to-select Entity Detail View** — click any table row to open that entity's full profile (website, contact, LinkedIn, pricing, scores, notes); the Website column stays independently clickable
+- **LinkedIn-linked Notes** — founders/executives named in an entity's Notes are auto-linked to their LinkedIn profile when a verified match exists (`data/people_linkedin.py`)
 - **Priority Scoring** — automatic 1–10 score per entity based on state legislation risk, geographic reach, exosome engagement level, and contact completeness
 - **Update Log** — auditable change history for all entity additions and pipeline runs
 - **Add Entity form** — add entities directly from the sidebar; IND-seeking entities are automatically excluded and scored 0
@@ -19,6 +21,8 @@ requirements.txt
 data/
   entities.py           # Seed data for entity_registry
   states_seed.csv       # Seed data for state_registry (state legislation)
+  pricing_tiers.py      # Manual pricing-tier assignments per entity
+  people_linkedin.py    # Verified name -> LinkedIn URL map for Notes auto-linking
 db/
   schema.sql            # SQLite schema (state_registry, entity_registry, update_log)
   exo_market.db         # SQLite database (auto-created on first run)
