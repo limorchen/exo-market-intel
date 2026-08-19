@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import math
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
+from data.people_linkedin import PEOPLE_LINKEDIN
 from data.pricing_tiers import get_pricing_basis
 from utils.db import get_conn, init_db, log_change
 from utils.scoring import (
@@ -201,6 +203,18 @@ def render_map(states_df: pd.DataFrame, entities_df: pd.DataFrame):
 
 # ── SECTION B — Entity table ──────────────────────────────────────────────────
 
+_PEOPLE_PATTERN = re.compile(
+    "|".join(re.escape(name) for name in sorted(PEOPLE_LINKEDIN, key=len, reverse=True))
+)
+
+
+def linkify_people(text: str) -> str:
+    """Turn known founder/executive names in free-text notes into LinkedIn links."""
+    if not text:
+        return text
+    return _PEOPLE_PATTERN.sub(lambda m: f"[{m.group(0)}]({PEOPLE_LINKEDIN[m.group(0)]})", text)
+
+
 def render_entities(entities_df: pd.DataFrame):
     st.subheader("Section B — Entity Registry")
 
@@ -284,22 +298,13 @@ def render_entities(entities_df: pd.DataFrame):
     # Add deal indicator column
     show_df.insert(1, "🔥", show_df["Recent Deal"].apply(lambda x: "🔥" if x else ""))
 
-    # LinkColumn can only show custom per-row text via a regex captured from the
-    # URL itself, so append the entity name as a URL fragment purely for display —
-    # fragments are inert on click (ignored by the browser/server on navigation).
-    def _name_link(row):
-        href = row["Website"] if pd.notna(row["Website"]) and row["Website"] else "#"
-        return f"{href}#{row['Name']}"
-
-    show_df["Name"] = show_df.apply(_name_link, axis=1)
-
     def _highlight_deals(row):
         color = "background-color: #fff8e1; font-weight: 500;" if row.get("Recent Deal") else ""
         return [color] * len(row)
 
     styled = show_df.style.apply(_highlight_deals, axis=1)
 
-    st.caption("Click a row to open its Entity Detail View below — clicking Name/Website still opens the link.")
+    st.caption("Click a row (Name, Type, States, etc.) to open its Entity Detail View below. The Website column stays a live link.")
     table_event = st.dataframe(
         styled,
         use_container_width=True,
@@ -307,7 +312,6 @@ def render_entities(entities_df: pd.DataFrame):
         on_select="rerun",
         selection_mode="single-row",
         column_config={
-            "Name": st.column_config.LinkColumn("Name", display_text=r"#([^#]*)$"),
             "Website": st.column_config.LinkColumn("Website"),
             "Score": st.column_config.NumberColumn("Score", format="%.1f"),
             "GTM Score": st.column_config.NumberColumn("GTM Score", format="%.1f"),
@@ -389,7 +393,7 @@ def render_entities(entities_df: pd.DataFrame):
                 st.markdown(f"**IND Seeking:** {'Yes — EXCLUDED' if row.get('ind_seeking') else 'No'}")
             st.markdown(f"**Products:** {row.get('products', '—')}")
             st.markdown(f"**Brands Carried:** {row.get('brands_carried') or '—'}")
-            st.markdown(f"**Notes:** {row.get('notes', '—')}")
+            st.markdown(f"**Notes:** {linkify_people(row.get('notes', '—'))}")
 
     # Export
     buf = io.BytesIO()
