@@ -208,9 +208,12 @@ def pending(conn, files):
     return [f for f in files if known.get(f["id"]) != f["modifiedTime"]]
 
 
-def sync_with_drive(conn, service, files, progress=None):
+def sync_with_drive(conn, service, files, progress=None, should_stop=None):
     """Index new/changed files from `files` (a Drive listing made with the syncing
-    user's own access).
+    user's own access). Each paper is committed as soon as it's indexed, so an
+    interrupted sync resumes where it stopped. `should_stop()` is checked before each
+    paper (e.g. the user's sign-in is about to expire); if it returns True the sync
+    stops early and the report has paused=True.
 
     A file missing from one person's listing may just be one they can't see, so
     nothing is deleted on that basis. Papers no signed-in user has seen in Drive for
@@ -223,8 +226,11 @@ def sync_with_drive(conn, service, files, progress=None):
     excluded = purge_excluded(conn)
     mark_seen(conn, files)
     todo = pending(conn, files)
-    added, failed = 0, []
+    added, failed, paused = 0, [], False
     for i, f in enumerate(todo, start=1):
+        if should_stop and should_stop():
+            paused = True
+            break
         if progress:
             progress(i, len(todo), f["name"])
         try:
@@ -240,7 +246,8 @@ def sync_with_drive(conn, service, files, progress=None):
     cutoff = (datetime.now(timezone.utc) - timedelta(days=config.PRUNE_AFTER_DAYS)).isoformat(timespec="seconds")
     removed = conn.execute("DELETE FROM docs WHERE last_seen < ?", (cutoff,)).rowcount
     conn.commit()
-    return {"total": len(files), "indexed": added, "removed": removed, "excluded": excluded, "failed": failed}
+    return {"total": len(files), "indexed": added, "removed": removed, "excluded": excluded, "failed": failed,
+            "paused": paused, "remaining": len(todo) - added - len(failed)}
 
 
 class SparseBM25:

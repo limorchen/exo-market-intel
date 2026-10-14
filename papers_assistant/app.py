@@ -56,16 +56,44 @@ def require_company_login():
     return email
 
 
-def ask_to_sign_in_again():
+SIGN_IN_MESSAGES = {
+    "expired": "Your Google sign-in has expired (Google limits it to about an hour). Please sign in again.",
+    "before_sync": "Your Google sign-in expires in a few minutes, too soon to start a sync. "
+                   "Sign in again, then click **Sync** right away: you'll have a full hour.",
+    "sync_paused": "Sync paused because your Google sign-in was about to expire. Everything indexed so far "
+                   "is saved. Sign in again and click **Sync** to continue where it stopped.",
+}
+
+
+def ask_to_sign_in_again(reason="expired"):
+    """Full-page prompt to sign in again. Called from inside the sidebar (sync), it
+    reruns first so the message is shown in the main area, not squeezed into the sidebar."""
+    if st.session_state.get("signin_reason") != reason:
+        st.session_state["signin_reason"] = reason
+        st.rerun()
     st.title("📚 NurExone Papers Assistant")
-    st.warning("Your Google sign-in has expired (Google limits it to about an hour). Please sign in again.")
+    st.warning(SIGN_IN_MESSAGES[reason])
+    if rep := st.session_state.get("last_sync"):
+        st.caption(f"Last sync: {rep['indexed']} papers indexed"
+                   + (f", {rep['remaining']} still to go." if rep.get("remaining") else "."))
     if st.button("Sign in again", type="primary"):
-        st.session_state.pop("drive_listing", None)
+        for key in ("drive_listing", "signin_reason"):
+            st.session_state.pop(key, None)
         st.logout()
     st.stop()
 
 
+def signin_seconds_left():
+    """Seconds until the Google sign-in (and its Drive access token) expires, or None if unknown."""
+    try:
+        return float(st.user.get("exp")) - time.time()
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 user_email = require_company_login()
+if reason := st.session_state.get("signin_reason"):
+    ask_to_sign_in_again(reason)
 dev_mode = user_email == "local-dev"
 
 
@@ -139,20 +167,33 @@ def my_drive_files(force=False):
     return files
 
 
+SYNC_MIN_SIGNIN_SECONDS = 15 * 60   # don't start a sync with less sign-in time left than this
+SYNC_STOP_SIGNIN_SECONDS = 2 * 60   # pause a running sync this close to expiry
+
+
 def run_sync():
+    left = signin_seconds_left()
+    if left is not None and left < SYNC_MIN_SIGNIN_SECONDS:
+        ask_to_sign_in_again("expired" if left <= 0 else "before_sync")
     files = my_drive_files(force=True)
     bar = st.sidebar.progress(0.0, text="Preparing…")
 
     def progress(i, n, name):
         bar.progress(i / max(n, 1), text=f"Indexing {i}/{n}: {name[:40]}")
 
+    def should_stop():
+        left = signin_seconds_left()
+        return left is not None and left < SYNC_STOP_SIGNIN_SECONDS
+
     try:
         with st.spinner("Syncing with Google Drive…"):
-            report = idx.sync_with_drive(get_conn(), drive_service(), files, progress)
+            report = idx.sync_with_drive(get_conn(), drive_service(), files, progress, should_stop)
     except drive.SessionExpired:
         ask_to_sign_in_again()
     bar.empty()
     st.session_state["last_sync"] = report
+    if report.get("paused"):
+        ask_to_sign_in_again("sync_paused")
 
 
 if dev_mode:
