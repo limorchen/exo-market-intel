@@ -1,0 +1,3 @@
+index/
+.streamlit/secrets.toml
+.venv/
