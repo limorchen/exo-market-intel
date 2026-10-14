@@ -135,16 +135,27 @@ def reranker():
     return _reranker or None
 
 
-def _embed_passages(texts):
+def _embed_passages(texts, on_progress=None):
+    """on_progress(done, total) is called every 64 passages; a 400-page book has
+    ~1,300 passages and can take minutes on a 1-CPU server."""
     # Small batches: fastembed's default (256) makes the ONNX runtime grab ~1.8 GB on a
     # long paper, enough to crash a 2 GB server; 16 needs ~0.2 GB and gives identical vectors.
-    vecs = np.array(list(embedder().passage_embed(texts, batch_size=16)), dtype=np.float32)
+    vecs = []
+    for vec in embedder().passage_embed(texts, batch_size=16):
+        vecs.append(vec)
+        if on_progress and len(vecs) % 64 == 0:
+            on_progress(len(vecs), len(texts))
+    vecs = np.array(vecs, dtype=np.float32).reshape(len(texts), -1)
     return vecs / np.linalg.norm(vecs, axis=1, keepdims=True).clip(min=1e-9)
 
 
-def upsert_document(conn, file, title, pages):
-    """Replace a document's chunks. Returns the number of chunks written."""
+def upsert_document(conn, file, title, pages, on_progress=None):
+    """Replace a document's chunks. Returns the number of chunks written.
+    The slow part (embedding) runs before any database write, so the write
+    transaction stays short and other users' requests aren't blocked meanwhile."""
     chunks = chunk_pages(pages)
+    # title is embedded with each chunk so passages keep their paper's context
+    vecs = _embed_passages([f"{title}\n{text}" for _, text in chunks], on_progress) if chunks else []
     conn.execute("DELETE FROM docs WHERE file_id = ?", (file["id"],))
     conn.execute(
         "INSERT INTO docs (file_id, name, title, folder, mime, modified, link, n_pages, n_chars, indexed_at, last_seen) "
@@ -153,8 +164,6 @@ def upsert_document(conn, file, title, pages):
          file.get("webViewLink"), len(pages), sum(len(t) for _, t in pages), _now(), _now()),
     )
     if chunks:
-        # title is embedded with each chunk so passages keep their paper's context
-        vecs = _embed_passages([f"{title}\n{text}" for _, text in chunks])
         conn.executemany(
             "INSERT INTO chunks (file_id, page, ord, text, embedding) VALUES (?, ?, ?, ?, ?)",
             [(file["id"], page, i, text, vec.tobytes()) for i, ((page, text), vec) in enumerate(zip(chunks, vecs))],
@@ -225,7 +234,8 @@ def sync_with_drive(conn, service, files, progress=None, should_stop=None):
 
     excluded = purge_excluded(conn)
     mark_seen(conn, files)
-    todo = pending(conn, files)
+    # Smallest first: most papers become searchable quickly; books (minutes each) go last.
+    todo = sorted(pending(conn, files), key=lambda f: int(f.get("size") or 0))
     added, failed, paused = 0, [], False
     for i, f in enumerate(todo, start=1):
         if should_stop and should_stop():
@@ -236,7 +246,9 @@ def sync_with_drive(conn, service, files, progress=None, should_stop=None):
         try:
             data = drive.download(service, f)
             title, pages = extract.extract(data, f["mimeType"], f["name"])
-            upsert_document(conn, f, title, pages)
+            on_embed = (lambda done, total, i=i, f=f: progress(i, len(todo), f["name"], f"passages {done:,}/{total:,}")
+                        ) if progress else None
+            upsert_document(conn, f, title, pages, on_embed)
             added += 1
         except drive.SessionExpired:
             raise

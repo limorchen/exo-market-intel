@@ -178,8 +178,8 @@ def run_sync():
     files = my_drive_files(force=True)
     bar = st.sidebar.progress(0.0, text="Preparing…")
 
-    def progress(i, n, name):
-        bar.progress(i / max(n, 1), text=f"Indexing {i}/{n}: {name[:40]}")
+    def progress(i, n, name, detail=""):
+        bar.progress(i / max(n, 1), text=f"Indexing {i}/{n}: {name[:40]}" + (f" — {detail}" if detail else ""))
 
     def should_stop():
         left = signin_seconds_left()

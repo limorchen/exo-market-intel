@@ -7,6 +7,8 @@ only ever see what that person can already open in Drive.
 import fnmatch
 import io
 
+import google_auth_httplib2
+import httplib2
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -37,7 +39,7 @@ def is_excluded_path(folder_path):
     """True if any folder in a 'Literature/sub/subsub' path is excluded."""
     return any(is_excluded_folder(part) for part in (folder_path or "").split("/") if part)
 
-FIELDS = "nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink)"
+FIELDS = "nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink, size)"
 
 
 class SessionExpired(Exception):
@@ -59,13 +61,21 @@ def _scope_missing(e):
                                    "insufficient authentication scopes"))
 
 
+# Every Drive request gets a time limit and retries: without them, one stalled
+# connection would leave a sync waiting forever on a single paper.
+HTTP_TIMEOUT_SECONDS = 60
+RETRIES = 3
+
+
 def get_service(access_token):
-    return build("drive", "v3", credentials=Credentials(token=access_token), cache_discovery=False)
+    http = google_auth_httplib2.AuthorizedHttp(
+        Credentials(token=access_token), http=httplib2.Http(timeout=HTTP_TIMEOUT_SECONDS))
+    return build("drive", "v3", http=http, cache_discovery=False)
 
 
 def _call(request):
     try:
-        return request.execute()
+        return request.execute(num_retries=RETRIES)
     except RefreshError as e:
         # Expired token: the Google client tries to refresh it, but the app holds no
         # refresh token (by design), so the user has to sign in again.
@@ -130,7 +140,7 @@ def download(service, file):
     done = False
     try:
         while not done:
-            _, done = downloader.next_chunk()
+            _, done = downloader.next_chunk(num_retries=RETRIES)
     except RefreshError as e:
         raise SessionExpired() from e
     except HttpError as e:
