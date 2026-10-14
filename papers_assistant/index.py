@@ -136,7 +136,9 @@ def reranker():
 
 
 def _embed_passages(texts):
-    vecs = np.array(list(embedder().passage_embed(texts)), dtype=np.float32)
+    # Small batches: fastembed's default (256) makes the ONNX runtime grab ~1.8 GB on a
+    # long paper, enough to crash a 2 GB server; 16 needs ~0.2 GB and gives identical vectors.
+    vecs = np.array(list(embedder().passage_embed(texts, batch_size=16)), dtype=np.float32)
     return vecs / np.linalg.norm(vecs, axis=1, keepdims=True).clip(min=1e-9)
 
 
