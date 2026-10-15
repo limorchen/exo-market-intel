@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS docs (
     n_pages     INTEGER,
     n_chars     INTEGER,
     indexed_at  TEXT,
-    last_seen   TEXT
+    last_seen   TEXT,
+    md5         TEXT,   -- Drive content checksum (PDF/Word; Google Docs have none)
+    canonical_id TEXT   -- set for an identical copy of another file: its passages live there
 );
 CREATE TABLE IF NOT EXISTS chunks (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +61,12 @@ def drive_path(d):
     return " › ".join(parts)
 
 
+def where_filed(d):
+    """drive_path(d), plus the other folders holding an identical copy, if any."""
+    also = d.get("also_in") or []
+    return drive_path(d) + (f"  (also in: {'; '.join(also)})" if also else "")
+
+
 def tokenize(text):
     return [t for t in _TOKEN_RE.findall(text.lower()) if t not in _STOP]
 
@@ -69,10 +77,11 @@ def connect(path=None):
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
-    try:  # databases created before last_seen existed
-        conn.execute("ALTER TABLE docs ADD COLUMN last_seen TEXT")
-    except sqlite3.OperationalError:
-        pass
+    for column in ("last_seen TEXT", "md5 TEXT", "canonical_id TEXT"):  # older databases
+        try:
+            conn.execute(f"ALTER TABLE docs ADD COLUMN {column}")
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 
@@ -158,11 +167,14 @@ def upsert_document(conn, file, title, pages, on_progress=None):
     vecs = _embed_passages([f"{title}\n{text}" for _, text in chunks], on_progress) if chunks else []
     conn.execute("DELETE FROM docs WHERE file_id = ?", (file["id"],))
     conn.execute(
-        "INSERT INTO docs (file_id, name, title, folder, mime, modified, link, n_pages, n_chars, indexed_at, last_seen) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO docs (file_id, name, title, folder, mime, modified, link, n_pages, n_chars, indexed_at, "
+        "last_seen, md5) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (file["id"], file["name"], title, file.get("folder", ""), file["mimeType"], file["modifiedTime"],
-         file.get("webViewLink"), len(pages), sum(len(t) for _, t in pages), _now(), _now()),
+         file.get("webViewLink"), len(pages), sum(len(t) for _, t in pages), _now(), _now(), file.get("md5Checksum")),
     )
+    # Copies that were identical to this file's old content no longer are: drop them so
+    # the next sync indexes them in their own right.
+    conn.execute("DELETE FROM docs WHERE canonical_id = ? AND md5 IS NOT ?", (file["id"], file.get("md5Checksum")))
     if chunks:
         conn.executemany(
             "INSERT INTO chunks (file_id, page, ord, text, embedding) VALUES (?, ?, ?, ?, ?)",
@@ -178,10 +190,11 @@ def mark_seen(conn, files):
     now = _now()
     before = conn.total_changes
     conn.executemany(
-        "UPDATE docs SET name = ?, folder = ?, link = ? WHERE file_id = ? "
-        "AND (name IS NOT ? OR folder IS NOT ? OR link IS NOT ?)",
-        [(f["name"], f.get("folder", ""), f.get("webViewLink"), f["id"],
-          f["name"], f.get("folder", ""), f.get("webViewLink")) for f in files],
+        "UPDATE docs SET name = ?, folder = ?, link = ?, md5 = COALESCE(?, md5) WHERE file_id = ? "
+        "AND (name IS NOT ? OR folder IS NOT ? OR link IS NOT ? OR (? IS NOT NULL AND md5 IS NOT ?))",
+        [(f["name"], f.get("folder", ""), f.get("webViewLink"), f.get("md5Checksum"), f["id"],
+          f["name"], f.get("folder", ""), f.get("webViewLink"), f.get("md5Checksum"), f.get("md5Checksum"))
+         for f in files],
     )
     if conn.total_changes > before:  # renamed/moved papers: tell the app to reload the index
         conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('paths_changed_at', ?)", (now,))
@@ -212,9 +225,58 @@ def purge_excluded(conn):
 
 
 def pending(conn, files):
-    """Files in this Drive listing that are new or changed since they were indexed."""
+    """Files in this Drive listing that are new or changed since they were indexed,
+    plus copies whose original was removed from the index."""
     known = dict(conn.execute("SELECT file_id, modified FROM docs").fetchall())
-    return [f for f in files if known.get(f["id"]) != f["modifiedTime"]]
+    orphans = {r[0] for r in conn.execute(
+        "SELECT d.file_id FROM docs d WHERE d.canonical_id IS NOT NULL "
+        "AND NOT EXISTS (SELECT 1 FROM docs c WHERE c.file_id = d.canonical_id)")}
+    return [f for f in files if known.get(f["id"]) != f["modifiedTime"] or f["id"] in orphans]
+
+
+def find_original(conn, file):
+    """An already-indexed file with byte-identical content (same Drive MD5), if any."""
+    if not file.get("md5Checksum"):
+        return None
+    return conn.execute(
+        "SELECT file_id, title, n_pages, n_chars FROM docs WHERE md5 = ? AND canonical_id IS NULL "
+        "AND file_id != ? AND EXISTS (SELECT 1 FROM chunks WHERE chunks.file_id = docs.file_id) LIMIT 1",
+        (file["md5Checksum"], file["id"])).fetchone()
+
+
+def add_copy(conn, file, original):
+    """Record `file` as an identical copy of `original`: no download, no passages of
+    its own. Search shows the paper once, under whichever copy the user can open."""
+    orig_id, title, n_pages, n_chars = original
+    conn.execute("DELETE FROM docs WHERE file_id = ?", (file["id"],))
+    conn.execute(
+        "INSERT INTO docs (file_id, name, title, folder, mime, modified, link, n_pages, n_chars, indexed_at, "
+        "last_seen, md5, canonical_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (file["id"], file["name"], title, file.get("folder", ""), file["mimeType"], file["modifiedTime"],
+         file.get("webViewLink"), n_pages, n_chars, _now(), _now(), file.get("md5Checksum"), orig_id),
+    )
+    conn.commit()
+
+
+def dedupe_existing(conn):
+    """Turn papers that were indexed separately but are byte-identical into copies of
+    one original (keeps the earliest-indexed). Returns the number of copies merged."""
+    rows = conn.execute(
+        "SELECT md5, file_id FROM docs WHERE md5 IS NOT NULL AND canonical_id IS NULL "
+        "ORDER BY md5, indexed_at, file_id").fetchall()
+    merged, keep = 0, {}
+    for md5, fid in rows:
+        if md5 not in keep:
+            keep[md5] = fid
+            continue
+        orig = keep[md5]
+        conn.execute("DELETE FROM chunks WHERE file_id = ?", (fid,))
+        conn.execute("UPDATE docs SET canonical_id = ? WHERE file_id = ? OR canonical_id = ?", (orig, fid, fid))
+        merged += 1
+    if merged:  # same paper count and timestamps, so tell the app to reload explicitly
+        conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('paths_changed_at', ?)", (_now(),))
+    conn.commit()
+    return merged
 
 
 def sync_with_drive(conn, service, files, progress=None, should_stop=None):
@@ -234,15 +296,21 @@ def sync_with_drive(conn, service, files, progress=None, should_stop=None):
 
     excluded = purge_excluded(conn)
     mark_seen(conn, files)
+    merged = dedupe_existing(conn)
     # Smallest first: most papers become searchable quickly; books (minutes each) go last.
     todo = sorted(pending(conn, files), key=lambda f: int(f.get("size") or 0))
-    added, failed, paused = 0, [], False
+    added, copies, failed, paused = 0, 0, [], False
     for i, f in enumerate(todo, start=1):
         if should_stop and should_stop():
             paused = True
             break
         if progress:
             progress(i, len(todo), f["name"])
+        original = find_original(conn, f)
+        if original:  # identical to a paper already indexed: link it, don't re-index
+            add_copy(conn, f, original)
+            copies += 1
+            continue
         try:
             data = drive.download(service, f)
             title, pages = extract.extract(data, f["mimeType"], f["name"])
@@ -259,7 +327,8 @@ def sync_with_drive(conn, service, files, progress=None, should_stop=None):
     removed = conn.execute("DELETE FROM docs WHERE last_seen < ?", (cutoff,)).rowcount
     conn.commit()
     return {"total": len(files), "indexed": added, "removed": removed, "excluded": excluded, "failed": failed,
-            "paused": paused, "remaining": len(todo) - added - len(failed)}
+            "paused": paused, "remaining": len(todo) - added - copies - len(failed),
+            "duplicates": copies + merged}
 
 
 class SparseBM25:
@@ -317,9 +386,19 @@ class Index:
         self.by_id = {c["id"]: i for i, c in enumerate(self.chunks)}
         self.file_ids = np.array([c["file_id"] for c in self.chunks], dtype=object)
         self.by_doc_ord = {(c["file_id"], c["ord"]): i for i, c in enumerate(self.chunks)}
+        # Identical files filed in several folders: one original (with the passages) and
+        # copies. `copies[original_id]` lists every file, the original first.
+        self.copies = {}
+        for fid, name, folder, link, orig in conn.execute(
+                "SELECT file_id, name, folder, link, COALESCE(canonical_id, file_id) FROM docs "
+                "ORDER BY canonical_id IS NOT NULL, name"):
+            self.copies.setdefault(orig, []).append({"file_id": fid, "name": name, "folder": folder or "", "link": link})
+        self.where = {orig: " ".join(f"{c['folder']} {c['name']}" for c in cs).lower()
+                      for orig, cs in self.copies.items()}
         self.docs = [dict(zip(("file_id", "name", "title", "folder", "n_pages", "n_chars", "link", "modified"), r))
                      for r in conn.execute(
-                         "SELECT file_id, name, title, folder, n_pages, n_chars, link, modified FROM docs ORDER BY title")]
+                         "SELECT file_id, name, title, folder, n_pages, n_chars, link, modified FROM docs "
+                         "WHERE canonical_id IS NULL ORDER BY title")]
         if rows:
             self.matrix = np.vstack([np.frombuffer(r[5], dtype=np.float32) for r in rows])
             self.bm25 = SparseBM25(tokenize(f"{c['title']} {c['text']}") for c in self.chunks)
@@ -339,8 +418,7 @@ class Index:
             allowed = np.isin(self.file_ids, list(allowed_files))
         if doc_filter:
             f = doc_filter.lower()
-            match = np.array([f in c["title"].lower() or f in c["name"].lower() or f in c["folder"].lower()
-                              for c in self.chunks])
+            match = np.array([f in c["title"].lower() or f in self.where.get(c["file_id"], "") for c in self.chunks])
             allowed = match if allowed is None else allowed & match
         if allowed is not None and not allowed.any():
             return []
@@ -403,15 +481,28 @@ class UserView:
 
     def __init__(self, index, allowed_files):
         self.index = index
-        self.allowed = set(allowed_files)
-        self.docs = [d for d in index.docs if d["file_id"] in self.allowed]
+        allowed = set(allowed_files)
+        # A paper filed in several folders is shown once, under a copy this user can
+        # open; the other copies they can open are listed in `also_in`.
+        self.visible = {}
+        for orig, copies in index.copies.items():
+            seen = [c for c in copies if c["file_id"] in allowed]
+            if seen:
+                self.visible[orig] = seen
+        self.allowed = set(self.visible)
+        self.docs = [self._as_seen(d) for d in index.docs if d["file_id"] in self.allowed]
         self.n_chunks = sum(1 for c in index.chunks if c["file_id"] in self.allowed)
+
+    def _as_seen(self, item):
+        first, *others = self.visible[item["file_id"]]
+        return {**item, "name": first["name"], "folder": first["folder"], "link": first["link"],
+                "also_in": [drive_path(c) for c in others]}
 
     def __len__(self):
         return self.n_chunks
 
     def search(self, query, **kwargs):
-        return self.index.search(query, allowed_files=self.allowed, **kwargs)
+        return [self._as_seen(c) for c in self.index.search(query, allowed_files=self.allowed, **kwargs)]
 
     def neighbors(self, chunk_id, window=1):
-        return [c for c in self.index.neighbors(chunk_id, window) if c["file_id"] in self.allowed]
+        return [self._as_seen(c) for c in self.index.neighbors(chunk_id, window) if c["file_id"] in self.allowed]

@@ -241,7 +241,8 @@ with st.sidebar:
         run_sync()
         st.rerun()
     if rep := st.session_state.get("last_sync"):
-        st.success(f"Sync done: {rep['indexed']} indexed, {rep['total']} papers visible to you in Drive"
+        st.success(f"Sync done: {rep['indexed']} indexed, {rep['total']} files visible to you in Drive"
+                   + (f", {rep['duplicates']} identical copies linked instead of re-indexed" if rep.get("duplicates") else "")
                    + (f", {rep['removed']} long-deleted papers removed" if rep["removed"] else "")
                    + (f", {rep['excluded']} excluded files removed." if rep.get("excluded") else "."))
         if rep["failed"]:
@@ -252,12 +253,12 @@ with st.sidebar:
         with st.expander(f"⚠️ {len(no_text)} papers without extractable text"):
             st.caption("Probably scanned PDFs. Run OCR on them (e.g. open with Google Docs, or Acrobat) and re-upload.")
             for d in no_text:
-                st.markdown(f"- {paper_link(d['name'], d['link'])}  \n  📁 `{idx.drive_path(d)}`",
+                st.markdown(f"- {paper_link(d['name'], d['link'])}  \n  📁 `{idx.where_filed(d)}`",
                             unsafe_allow_html=True)
     with st.expander("Browse library"):
         q = st.text_input("Filter by title or folder", key="lib_filter").lower()
         for d in library.docs:
-            path = idx.drive_path(d)
+            path = idx.where_filed(d)
             if not q or q in (d["title"] or "").lower() or q in path.lower():
                 st.markdown(f"- {paper_link(d['title'] or d['name'], d['link'])}  \n  📁 `{path}`",
                             unsafe_allow_html=True)
@@ -288,13 +289,13 @@ def render_sources(sources):
         c = items[0][1]
         title = paper_link(c["title"], c.get("link"))
         cites = ", ".join(f"[{lab}] p.{x['page']}" for lab, x in items)
-        lines.append(f"- {title}  \n  📁 `{idx.drive_path(c)}`  \n  {cites}")
+        lines.append(f"- {title}  \n  📁 `{idx.where_filed(c)}`  \n  {cites}")
     st.markdown(f"**📄 Papers cited ({len(papers)})** · links open in a new tab\n" + "\n".join(lines),
                 unsafe_allow_html=True)
     with st.expander(f"📎 Cited passages ({len(sources)})", expanded=False):
         for lab, c in sources:
             st.markdown(f"**[{lab}]** {c['title']} — p.{c['page']}")
-            st.caption(f"📁 {idx.drive_path(c)}")
+            st.caption(f"📁 {idx.where_filed(c)}")
             st.caption(c["text"][:600] + ("…" if len(c["text"]) > 600 else ""))
 
 

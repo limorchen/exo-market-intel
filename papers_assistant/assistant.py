@@ -10,7 +10,7 @@ import json
 import anthropic
 
 import config
-from index import drive_path
+from index import where_filed
 
 SYSTEM_PROMPT = """You are the research assistant for NurExone's scientists. You answer questions using the company's own library of scientific papers, which you can reach only through your tools. NurExone develops exosome-based therapeutics (including drug-loaded exosomes for CNS and spinal-cord injury), so expect questions on extracellular vesicles, regeneration, neuroinflammation, delivery, manufacturing and related biology.
 
@@ -91,7 +91,7 @@ class SourceRegistry:
 
 def _fmt_passage(label, c):
     weak = " [WEAK MATCH: may not be relevant]" if c.get("weak") else ""
-    return f"[{label}]{weak} {c['title']} — p.{c['page']}\nDrive path: {drive_path(c)}\n{c['text']}"
+    return f"[{label}]{weak} {c['title']} — p.{c['page']}\nDrive path: {where_filed(c)}\n{c['text']}"
 
 
 def run_tool(name, args, index, registry):
@@ -126,7 +126,7 @@ def run_tool(name, args, index, registry):
         docs = [d for d in index.docs
                 if not flt or flt in (d["title"] or "").lower() or flt in d["name"].lower() or flt in (d["folder"] or "").lower()]
         status = f"📚 Listed library" + (f" matching “{flt}”" if flt else "") + f" — {len(docs)} papers"
-        lines = [f"- {d['title'] or d['name']} | path: {drive_path(d)} | {d['n_pages']} pages"
+        lines = [f"- {d['title'] or d['name']} | path: {where_filed(d)} | {d['n_pages']} pages"
                  + ("  [NO TEXT EXTRACTED — likely a scanned PDF]" if not d["n_chars"] else "")
                  for d in docs[:300]]
         more = f"\n(+{len(docs) - 300} more; narrow with a filter)" if len(docs) > 300 else ""

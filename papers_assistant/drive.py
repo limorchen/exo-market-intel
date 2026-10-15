@@ -39,7 +39,7 @@ def is_excluded_path(folder_path):
     """True if any folder in a 'Literature/sub/subsub' path is excluded."""
     return any(is_excluded_folder(part) for part in (folder_path or "").split("/") if part)
 
-FIELDS = "nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink, size)"
+FIELDS = "nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink, size, md5Checksum)"
 
 
 class SessionExpired(Exception):
