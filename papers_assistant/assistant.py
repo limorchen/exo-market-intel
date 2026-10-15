@@ -206,6 +206,26 @@ def respond(client, messages, index, registry):
     yield "done", "".join(turn_text)
 
 
+CONTACT = "Please let Limor know."
+
+
+def friendly_error(e):
+    """A message colleagues can act on, instead of the raw API error."""
+    ref = getattr(e, "request_id", None)
+    ref = f" (reference: {ref})" if ref else ""
+    if isinstance(e, anthropic.BadRequestError) and "credit balance" in str(e).lower():
+        return f"The assistant is temporarily unavailable: the AI service account is out of credit. {CONTACT}"
+    if isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+        return f"The assistant can't reach the AI service: its access key was rejected. {CONTACT}"
+    if isinstance(e, anthropic.RateLimitError):
+        return "The AI service is busy right now. Please try again in a minute."
+    if isinstance(e, (anthropic.APIConnectionError, anthropic.APITimeoutError)):
+        return "Couldn't connect to the AI service. Please try again in a moment."
+    if isinstance(e, anthropic.APIStatusError) and e.status_code >= 500:
+        return f"The AI service had a temporary problem. Please try again in a moment{ref}."
+    return f"Something went wrong while answering ({type(e).__name__}){ref}. If it keeps happening, {CONTACT[0].lower()}{CONTACT[1:]}"
+
+
 def make_client():
     key = config.get("ANTHROPIC_API_KEY")
     return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()

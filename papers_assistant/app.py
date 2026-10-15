@@ -3,6 +3,7 @@
 Run:  streamlit run app.py --server.fileWatcherType poll
 """
 import html
+import logging
 import re
 import time
 
@@ -324,7 +325,8 @@ for turn in st.session_state.chat:
         st.markdown(turn["content"])
         if turn["role"] == "assistant":
             render_sources(turn.get("sources"))
-            copy_button(turn["content"], turn.get("sources"))
+            if not turn.get("failed"):
+                copy_button(turn["content"], turn.get("sources"))
 
 if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
     st.session_state.chat.append({"role": "user", "content": prompt})
@@ -334,7 +336,7 @@ if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
     turn_start = len(st.session_state.api_messages)
     st.session_state.api_messages.append({"role": "user", "content": prompt})
     registry = st.session_state.registry
-    steps, answer = [], ""
+    steps, answer, failed = [], "", False
 
     with st.chat_message("assistant"):
         status = st.status("Thinking…", expanded=False)
@@ -361,11 +363,14 @@ if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
         except Exception as e:
             # Drop the failed turn so the history stays valid for the next question.
             del st.session_state.api_messages[turn_start:]
-            answer = f"⚠️ Error talking to the model: `{type(e).__name__}: {e}`"
+            logging.exception("Answering failed")  # full details go to the server log only
+            answer, failed = f"⚠️ {assistant.friendly_error(e)}", True
         status.update(label=f"Done — {len(steps)} research steps" if steps else "Done", state="complete")
         placeholder.markdown(answer)
         sources = cited_sources(answer, registry)
         render_sources(sources)
-        copy_button(answer, sources)
+        if not failed:
+            copy_button(answer, sources)
 
-    st.session_state.chat.append({"role": "assistant", "content": answer, "steps": steps, "sources": sources})
+    st.session_state.chat.append({"role": "assistant", "content": answer, "steps": steps, "sources": sources,
+                                  "failed": failed})
