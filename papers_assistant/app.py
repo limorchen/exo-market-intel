@@ -9,6 +9,7 @@ import time
 import streamlit as st
 
 import assistant
+from copy_button import copy_button
 import config
 import drive
 import index as idx
@@ -323,6 +324,7 @@ for turn in st.session_state.chat:
         st.markdown(turn["content"])
         if turn["role"] == "assistant":
             render_sources(turn.get("sources"))
+            copy_button(turn["content"], turn.get("sources"))
 
 if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
     st.session_state.chat.append({"role": "user", "content": prompt})
@@ -364,5 +366,6 @@ if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
         placeholder.markdown(answer)
         sources = cited_sources(answer, registry)
         render_sources(sources)
+        copy_button(answer, sources)
 
     st.session_state.chat.append({"role": "assistant", "content": answer, "steps": steps, "sources": sources})
