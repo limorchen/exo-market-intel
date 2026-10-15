@@ -226,6 +226,30 @@ def friendly_error(e):
     return f"Something went wrong while answering ({type(e).__name__}){ref}. If it keeps happening, {CONTACT[0].lower()}{CONTACT[1:]}"
 
 
+MODEL_NAMES = {"claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
+               "claude-haiku-5-5": "Claude Haiku 5.5", "claude-fable-5-1": "Claude Fable 5.1"}
+
+
+def ai_status(client=None):
+    """Can the assistant answer right now? Returns (level, message), level in
+    {"ok", "down", "unknown"}. Sends a tiny real request (a fraction of a cent):
+    that's the only reliable way to tell whether the account still has credit."""
+    name = MODEL_NAMES.get(config.CLAUDE_MODEL, config.CLAUDE_MODEL)
+    try:
+        client = client or make_client()
+        client.messages.create(model=config.CLAUDE_MODEL, max_tokens=32, output_config={"effort": "low"},
+                               messages=[{"role": "user", "content": "Reply with OK."}])
+        return "ok", f"AI answers: available ({name})"
+    except anthropic.BadRequestError as e:
+        if "credit balance" in str(e).lower():
+            return "down", "AI answers unavailable: the AI service account is out of credit"
+        return "unknown", f"AI service check failed ({name}): {type(e).__name__}"
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError):
+        return "down", "AI answers unavailable: the access key was rejected"
+    except Exception:
+        return "unknown", "AI service not reachable right now"
+
+
 def make_client():
     key = config.get("ANTHROPIC_API_KEY")
     return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()

@@ -223,10 +223,23 @@ if "api_messages" not in st.session_state:
     new_conversation()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_ai_status(model):
+    """Shared by all users and re-checked at most every 5 minutes (keyed by model, so
+    changing CLAUDE_MODEL checks again right away)."""
+    return assistant.ai_status()
+
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("📚 Papers Assistant")
     st.caption(f"Signed in as {user_email}")
+    ai_level, ai_message = cached_ai_status(config.CLAUDE_MODEL)
+    ai_icon = {"ok": "🟢", "down": "🔴"}.get(ai_level, "🟠")
+    st.caption(f"{ai_icon} {ai_message}")
+    if ai_level != "ok" and st.button("Check again", key="ai_recheck", type="tertiary"):
+        cached_ai_status.clear()
+        st.rerun()
     if st.button("➕ New conversation", use_container_width=True):
         new_conversation()
         st.rerun()
@@ -364,6 +377,7 @@ if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
             # Drop the failed turn so the history stays valid for the next question.
             del st.session_state.api_messages[turn_start:]
             logging.exception("Answering failed")  # full details go to the server log only
+            cached_ai_status.clear()  # so the sidebar status reflects this failure on the next view
             answer, failed = f"⚠️ {assistant.friendly_error(e)}", True
         status.update(label=f"Done — {len(steps)} research steps" if steps else "Done", state="complete")
         placeholder.markdown(answer)
