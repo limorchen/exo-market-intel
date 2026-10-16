@@ -135,8 +135,19 @@ def run_tool(name, args, index, registry):
     raise ValueError(f"unknown tool {name}")
 
 
-def respond(client, messages, index, registry):
+def _report_usage(on_usage, response):
+    """Hand a response's model and token usage to the caller (for spend tracking);
+    a logging problem must never break an answer."""
+    if on_usage:
+        try:
+            on_usage(response.model, response.usage)
+        except Exception:
+            pass
+
+
+def respond(client, messages, index, registry, on_usage=None):
     """Run one assistant turn over `messages` (mutated in place, append-only).
+    `on_usage(model, usage)` is called after every API response.
 
     Yields ("text", str) for streamed text; ("interim", str) when the text streamed so
     far turned out to be a preamble to tool calls (the UI moves it out of the answer);
@@ -164,6 +175,7 @@ def respond(client, messages, index, registry):
                         turn_text.append(event.text)
                         yield "text", event.text
                 response = stream.get_final_message()
+            _report_usage(on_usage, response)
             json_retries = 0
         except ValueError:
             # Tool input JSON the SDK couldn't parse at all: re-issue the turn (bounded).
@@ -230,15 +242,16 @@ MODEL_NAMES = {"claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Claud
                "claude-haiku-5-5": "Claude Haiku 5.5", "claude-fable-5-1": "Claude Fable 5.1"}
 
 
-def ai_status(client=None):
+def ai_status(client=None, on_usage=None):
     """Can the assistant answer right now? Returns (level, message), level in
     {"ok", "down", "unknown"}. Sends a tiny real request (a fraction of a cent):
     that's the only reliable way to tell whether the account still has credit."""
     name = MODEL_NAMES.get(config.CLAUDE_MODEL, config.CLAUDE_MODEL)
     try:
         client = client or make_client()
-        client.messages.create(model=config.CLAUDE_MODEL, max_tokens=32, output_config={"effort": "low"},
-                               messages=[{"role": "user", "content": "Reply with OK."}])
+        response = client.messages.create(model=config.CLAUDE_MODEL, max_tokens=32, output_config={"effort": "low"},
+                                          messages=[{"role": "user", "content": "Reply with OK."}])
+        _report_usage(on_usage, response)
         return "ok", f"AI answers: available ({name})"
     except anthropic.BadRequestError as e:
         if "credit balance" in str(e).lower():

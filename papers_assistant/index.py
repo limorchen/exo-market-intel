@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 import config
+import spend
 
 CHUNK_CHARS = 1100
 CHUNK_OVERLAP = 200
@@ -77,6 +78,7 @@ def connect(path=None):
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    conn.executescript(spend.SCHEMA)
     for column in ("last_seen TEXT", "md5 TEXT", "canonical_id TEXT"):  # older databases
         try:
             conn.execute(f"ALTER TABLE docs ADD COLUMN {column}")

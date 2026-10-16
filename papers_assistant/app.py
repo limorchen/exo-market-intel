@@ -6,6 +6,7 @@ import html
 import logging
 import re
 import time
+import uuid
 
 import streamlit as st
 
@@ -14,6 +15,7 @@ from copy_button import copy_button
 import config
 import drive
 import index as idx
+import spend
 
 st.set_page_config(page_title="Papers Assistant", page_icon="📚", layout="wide")
 
@@ -227,7 +229,29 @@ if "api_messages" not in st.session_state:
 def cached_ai_status(model):
     """Shared by all users and re-checked at most every 5 minutes (keyed by model, so
     changing CLAUDE_MODEL checks again right away)."""
-    return assistant.ai_status()
+    return assistant.ai_status(
+        on_usage=lambda m, u: spend.record(get_conn(), None, None, "status", m, u))
+
+
+def render_spend():
+    """This month's AI spend and, if the last top-up is configured, an estimate of the
+    credit left. Estimated from this app's own usage only (see spend.py)."""
+    conn = get_conn()
+    month_cost, month_questions, _ = spend.spent_since(conn, spend.month_start_iso())
+    lines = [f"💳 AI spend this month: ${month_cost:,.2f} · {month_questions} "
+             f"question{'' if month_questions == 1 else 's'}"]
+    low = False
+    if config.CREDIT_ADDED_USD and config.CREDIT_ADDED_ON:
+        since_cost, _, _ = spend.spent_since(conn, f"{config.CREDIT_ADDED_ON}T00:00:00+00:00")
+        left = config.CREDIT_ADDED_USD - since_cost
+        low = left < max(5.0, 0.1 * config.CREDIT_ADDED_USD)
+        lines.append(f"{'⚠️' if low else '🪙'} Credit left: ≈ ${max(left, 0):,.2f} "
+                     f"of ${config.CREDIT_ADDED_USD:,.2f} added {config.CREDIT_ADDED_ON}")
+    st.caption("  \n".join(lines))
+    if low:
+        st.warning("API credit is running low. Top up in the Claude Console (Billing).")
+    st.caption("Estimated from this app's own use. "
+               "[Exact balance: Claude Console → Billing](https://platform.claude.com/settings/billing)")
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -240,6 +264,7 @@ with st.sidebar:
     if ai_level != "ok" and st.button("Check again", key="ai_recheck", type="tertiary"):
         cached_ai_status.clear()
         st.rerun()
+    render_spend()
     if st.button("➕ New conversation", use_container_width=True):
         new_conversation()
         st.rerun()
@@ -356,8 +381,10 @@ if prompt := st.chat_input("Ask about the papers…", disabled=n_docs == 0):
         placeholder = st.empty()
         streamed = ""
         try:
+            question_id = uuid.uuid4().hex
+            log_usage = lambda m, u: spend.record(get_conn(), question_id, user_email, "answer", m, u)  # noqa: E731
             for kind, payload in assistant.respond(assistant.make_client(), st.session_state.api_messages,
-                                                   library, registry):
+                                                   library, registry, on_usage=log_usage):
                 if kind == "text":
                     streamed += payload
                     placeholder.markdown(streamed + "▌")

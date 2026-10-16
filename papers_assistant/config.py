@@ -31,5 +31,9 @@ MODEL_CACHE_DIR = get("MODEL_CACHE_DIR")
 # Drive folders to skip entirely (with everything inside), as comma-separated
 # name patterns, case-insensitive; * matches anything. E.g. "FlowJo*, Software, Old*".
 EXCLUDE_FOLDERS = [p.strip() for p in str(get("EXCLUDE_FOLDERS", "FlowJo*")).split(",") if p.strip()]
+# Last API credit top-up, so the sidebar can estimate what's left: amount in USD and
+# the date it was added (YYYY-MM-DD). Leave unset to show only this month's spend.
+CREDIT_ADDED_USD = float(get("CREDIT_ADDED_USD") or 0) or None
+CREDIT_ADDED_ON = get("CREDIT_ADDED_ON")
 # Indexed papers that no signed-in user has seen in Drive for this long are removed.
 PRUNE_AFTER_DAYS = int(get("PRUNE_AFTER_DAYS", 60))

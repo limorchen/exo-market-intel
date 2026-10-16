@@ -92,6 +92,7 @@ The app runs as a Render **Web Service** with a **persistent disk**, so the inde
 | Key | Value |
 |---|---|
 | `PYTHON_VERSION` | `3.12.7` |
+| `CREDIT_ADDED_USD`, `CREDIT_ADDED_ON` | unset | last API credit top-up (amount, `YYYY-MM-DD`); the sidebar then estimates the credit left. Anthropic has no API for the balance, so this is the top-up minus this app's own logged spend |
 | `PAPERS_INDEX_DB` | `/var/data/papers.db` |
 | `MODEL_CACHE_DIR` | `/var/data/models` |
 
